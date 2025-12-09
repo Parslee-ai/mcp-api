@@ -1,0 +1,130 @@
+@page "/"
+@using AnyAPI.Web.Services
+@inject ApiManagementService ApiService
+@rendermode InteractiveServer
+
+<PageTitle>AnyAPI Dashboard</PageTitle>
+
+<h1>AnyAPI Dashboard</h1>
+
+<p class="lead">Dynamic MCP Server for any REST API</p>
+
+@if (isLoading)
+{
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else
+{
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card text-white bg-primary mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Registered APIs</h5>
+                    <p class="card-text display-4">@totalApis</p>
+                </div>
+                <div class="card-footer">
+                    <a href="apis" class="text-white">View all &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card text-white bg-success mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Enabled APIs</h5>
+                    <p class="card-text display-4">@enabledApis</p>
+                </div>
+                <div class="card-footer">
+                    <a href="apis" class="text-white">Manage &rarr;</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card text-white bg-info mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Total Endpoints</h5>
+                    <p class="card-text display-4">@totalEndpoints</p>
+                </div>
+                <div class="card-footer">
+                    <span class="text-white">@enabledEndpoints enabled</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <a href="apis/register" class="btn btn-primary me-2">
+                        <i class="bi bi-plus-circle"></i> Register New API
+                    </a>
+                    <a href="apis" class="btn btn-outline-secondary">
+                        <i class="bi bi-list"></i> Browse APIs
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">MCP Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Add this to your MCP client configuration:</p>
+                    <pre class="bg-light p-2 rounded"><code>{
+  "anyapi": {
+    "command": "dotnet",
+    "args": ["run", "--project", "path/to/AnyAPI.Mcp"]
+  }
+}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private string? error;
+    private int totalApis;
+    private int enabledApis;
+    private int totalEndpoints;
+    private int enabledEndpoints;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var apis = await ApiService.GetAllApisAsync();
+            totalApis = apis.Count;
+            enabledApis = apis.Count(a => a.IsEnabled);
+
+            // Fetch endpoint counts from store (endpoints stored separately)
+            foreach (var api in apis)
+            {
+                totalEndpoints += await ApiService.GetEndpointCountAsync(api.Id);
+                enabledEndpoints += await ApiService.GetEnabledEndpointCountAsync(api.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load dashboard: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

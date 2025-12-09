@@ -1,0 +1,301 @@
+@page "/apis/{ApiId}"
+@using AnyAPI.Core.Models
+@using AnyAPI.Web.Services
+@inject ApiManagementService ApiService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+
+<PageTitle>@(api?.DisplayName ?? "API Details") - AnyAPI</PageTitle>
+
+@if (isLoading)
+{
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (api == null)
+{
+    <div class="alert alert-warning">API not found.</div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>@api.DisplayName</h1>
+            <p class="text-muted mb-0">@api.Description</p>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-outline-secondary" @onclick="RefreshApi" disabled="@isRefreshing">
+                @if (isRefreshing)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                }
+                else
+                {
+                    <span>Refresh</span>
+                }
+            </button>
+            <button class="btn @(api.IsEnabled ? "btn-warning" : "btn-success")"
+                    @onclick="ToggleApi"
+                    disabled="@isToggling">
+                @(api.IsEnabled ? "Disable" : "Enable")
+            </button>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">API Information</h5>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">ID</dt>
+                        <dd class="col-sm-8"><code>@api.Id</code></dd>
+
+                        <dt class="col-sm-4">Base URL</dt>
+                        <dd class="col-sm-8"><a href="@api.BaseUrl" target="_blank">@api.BaseUrl</a></dd>
+
+                        <dt class="col-sm-4">Spec URL</dt>
+                        <dd class="col-sm-8">
+                            @if (!string.IsNullOrEmpty(api.SpecUrl))
+                            {
+                                <a href="@api.SpecUrl" target="_blank">@api.SpecUrl</a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Not available</span>
+                            }
+                        </dd>
+
+                        <dt class="col-sm-4">Version</dt>
+                        <dd class="col-sm-8">@(api.ApiVersion ?? "N/A")</dd>
+
+                        <dt class="col-sm-4">Auth Type</dt>
+                        <dd class="col-sm-8">@GetAuthTypeName(api.Auth)</dd>
+
+                        <dt class="col-sm-4">Last Refreshed</dt>
+                        <dd class="col-sm-8">@api.LastRefreshed.ToString("g")</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="display-6">@totalEndpoints</div>
+                            <div class="text-muted">Total Endpoints</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="display-6">@enabledEndpoints</div>
+                            <div class="text-muted">Enabled</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Endpoints</h5>
+            <div>
+                <input type="text"
+                       class="form-control form-control-sm"
+                       placeholder="Filter endpoints..."
+                       @bind="filter"
+                       @bind:event="oninput"
+                       style="width: 250px;" />
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Method</th>
+                        <th>Path</th>
+                        <th>Operation</th>
+                        <th style="width: 100px;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var endpoint in FilteredEndpoints)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge @GetMethodBadgeClass(endpoint.Method)">
+                                    @endpoint.Method
+                                </span>
+                            </td>
+                            <td><code>@endpoint.Path</code></td>
+                            <td>
+                                <strong>@endpoint.OperationId</strong>
+                                @if (!string.IsNullOrEmpty(endpoint.Summary))
+                                {
+                                    <br />
+                                    <small class="text-muted">@endpoint.Summary</small>
+                                }
+                            </td>
+                            <td>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input"
+                                           type="checkbox"
+                                           checked="@endpoint.IsEnabled"
+                                           @onchange="() => ToggleEndpoint(endpoint)"
+                                           disabled="@isTogglingEndpoint" />
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string ApiId { get; set; } = "";
+
+    private ApiRegistration? api;
+    private IReadOnlyList<ApiEndpoint> endpoints = [];
+    private int totalEndpoints;
+    private int enabledEndpoints;
+    private bool isLoading = true;
+    private bool isRefreshing;
+    private bool isToggling;
+    private bool isTogglingEndpoint;
+    private string? error;
+    private string filter = "";
+
+    private IEnumerable<ApiEndpoint> FilteredEndpoints =>
+        endpoints.Where(e =>
+            string.IsNullOrEmpty(filter) ||
+            e.OperationId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+            e.Path.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+            (e.Summary?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadApi();
+    }
+
+    private async Task LoadApi()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            api = await ApiService.GetApiAsync(ApiId);
+            if (api != null)
+            {
+                endpoints = await ApiService.GetEndpointsAsync(ApiId);
+                totalEndpoints = endpoints.Count;
+                enabledEndpoints = endpoints.Count(e => e.IsEnabled);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load API: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshApi()
+    {
+        isRefreshing = true;
+        error = null;
+
+        try
+        {
+            api = await ApiService.RefreshApiAsync(ApiId);
+            endpoints = await ApiService.GetEndpointsAsync(ApiId);
+            totalEndpoints = endpoints.Count;
+            enabledEndpoints = endpoints.Count(e => e.IsEnabled);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to refresh API: {ex.Message}";
+        }
+        finally
+        {
+            isRefreshing = false;
+        }
+    }
+
+    private async Task ToggleApi()
+    {
+        if (api == null) return;
+
+        isToggling = true;
+        try
+        {
+            api = await ApiService.ToggleApiAsync(api.Id, !api.IsEnabled);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to toggle API: {ex.Message}";
+        }
+        finally
+        {
+            isToggling = false;
+        }
+    }
+
+    private async Task ToggleEndpoint(ApiEndpoint endpoint)
+    {
+        if (api == null) return;
+
+        isTogglingEndpoint = true;
+        try
+        {
+            await ApiService.ToggleEndpointAsync(api.Id, endpoint.Id, !endpoint.IsEnabled);
+            // Reload endpoints to get updated state
+            endpoints = await ApiService.GetEndpointsAsync(ApiId);
+            enabledEndpoints = endpoints.Count(e => e.IsEnabled);
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to toggle endpoint: {ex.Message}";
+        }
+        finally
+        {
+            isTogglingEndpoint = false;
+        }
+    }
+
+    private static string GetAuthTypeName(AuthConfiguration auth) => auth switch
+    {
+        NoAuthConfig => "None",
+        ApiKeyAuthConfig => "API Key",
+        BearerTokenAuthConfig => "Bearer Token",
+        BasicAuthConfig => "Basic Auth",
+        OAuth2AuthConfig => "OAuth2",
+        _ => "Unknown"
+    };
+
+    private static string GetMethodBadgeClass(string method) => method.ToUpperInvariant() switch
+    {
+        "GET" => "bg-primary",
+        "POST" => "bg-success",
+        "PUT" => "bg-warning text-dark",
+        "PATCH" => "bg-info text-dark",
+        "DELETE" => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

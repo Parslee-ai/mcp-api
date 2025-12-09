@@ -1,0 +1,96 @@
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Rider files
+.idea/
+*.sln.iml
+
+# VS Code files
+.vscode/
+
+# NuGet packages
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Test results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+TestResult.xml
+coverage*.xml
+coverage*.json
+*.coverage
+*.coveragexml
+
+# Build artifacts
+publish/
+*.dll
+*.exe
+!tools/**/*.exe
+
+# .NET Core
+project.assets.json
+*.props
+*.targets
+
+# User-specific files
+*.rsuser
+*.DotSettings.user
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment files
+*.env
+*.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+appsettings.Development.json
+appsettings.Local.json
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Secrets (never commit these)
+secrets.json
+credentials.json
+*.pfx
+*.p12
