@@ -46,7 +46,9 @@ public class DynamicToolProvider
         if (api == null)
             return JsonSerializer.Serialize(new { error = $"API '{apiId}' not found" });
 
-        var endpoint = api.Endpoints.FirstOrDefault(e =>
+        // Load endpoints separately (they're stored in a different container)
+        var endpoints = await _store.GetEndpointsAsync(apiId, ct);
+        var endpoint = endpoints.FirstOrDefault(e =>
             e.OperationId.Equals(operationId, StringComparison.OrdinalIgnoreCase) ||
             e.Id.Equals(operationId, StringComparison.OrdinalIgnoreCase));
 
@@ -91,6 +93,9 @@ public class DynamicToolProvider
         if (api == null)
             return JsonSerializer.Serialize(new { error = $"API '{apiId}' not found" });
 
+        // Load endpoints separately (they're stored in a different container)
+        var endpoints = await _store.GetEndpointsAsync(apiId, ct);
+
         var result = new
         {
             api.Id,
@@ -99,7 +104,7 @@ public class DynamicToolProvider
             api.BaseUrl,
             AuthType = api.Auth.GetType().Name.Replace("Config", ""),
             api.IsEnabled,
-            Endpoints = api.Endpoints
+            Endpoints = endpoints
                 .Where(e => e.IsEnabled)
                 .Select(e => new
                 {
@@ -130,8 +135,12 @@ public class DynamicToolProvider
         var apis = await _store.GetEnabledAsync(ct);
         var queryLower = query.ToLowerInvariant();
 
-        var matches = apis
-            .SelectMany(api => api.Endpoints
+        var matches = new List<object>();
+        foreach (var api in apis)
+        {
+            // Load endpoints separately for each API
+            var endpoints = await _store.GetEndpointsAsync(api.Id, ct);
+            var apiMatches = endpoints
                 .Where(e => e.IsEnabled)
                 .Where(e =>
                     e.OperationId.Contains(queryLower, StringComparison.OrdinalIgnoreCase) ||
@@ -145,11 +154,13 @@ public class DynamicToolProvider
                     e.Method,
                     e.Path,
                     e.Summary
-                }))
-            .Take(20)
-            .ToList();
+                });
+            matches.AddRange(apiMatches);
+            if (matches.Count >= 20) break;
+        }
 
-        return JsonSerializer.Serialize(new { count = matches.Count, results = matches },
+        var result = matches.Take(20).ToList();
+        return JsonSerializer.Serialize(new { count = result.Count, results = result },
             new JsonSerializerOptions { WriteIndented = true });
     }
 
