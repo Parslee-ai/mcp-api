@@ -1,4 +1,5 @@
 using AnyAPI.Core.Auth;
+using AnyAPI.Core.GraphQL;
 using AnyAPI.Core.Http;
 using AnyAPI.Core.OpenApi;
 using AnyAPI.Core.Postman;
@@ -54,6 +55,7 @@ builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
 builder.Services.AddHttpClient<OpenApiParser>();
 builder.Services.AddHttpClient<OpenApiDiscovery>();
 builder.Services.AddHttpClient<PostmanCollectionParser>();
+builder.Services.AddHttpClient<GraphQLSchemaParser>();
 builder.Services.AddHttpClient<DynamicApiClient>();
 
 // Register services - typed HttpClient services are transient by default

@@ -1,5 +1,6 @@
 namespace AnyAPI.Web.Services;
 
+using AnyAPI.Core.GraphQL;
 using AnyAPI.Core.Models;
 using AnyAPI.Core.OpenApi;
 using AnyAPI.Core.Postman;
@@ -14,28 +15,38 @@ public class ApiManagementService
     private readonly IOpenApiParser _parser;
     private readonly OpenApiDiscovery _discovery;
     private readonly PostmanCollectionParser _postmanParser;
+    private readonly GraphQLSchemaParser _graphqlParser;
 
     public ApiManagementService(
         IApiRegistrationStore store,
         IOpenApiParser parser,
         OpenApiDiscovery discovery,
-        PostmanCollectionParser postmanParser)
+        PostmanCollectionParser postmanParser,
+        GraphQLSchemaParser graphqlParser)
     {
         _store = store;
         _parser = parser;
         _discovery = discovery;
         _postmanParser = postmanParser;
+        _graphqlParser = graphqlParser;
     }
 
     /// <summary>
     /// Discovers and registers an API from a base URL.
-    /// Supports both OpenAPI specs and Postman Collections.
+    /// Supports OpenAPI specs, Postman Collections, and GraphQL endpoints.
     /// </summary>
     public async Task<ApiRegistration> RegisterApiAsync(
         string baseUrl,
         string? specUrl = null,
         CancellationToken ct = default)
     {
+        // Check if this is a GraphQL endpoint (either by URL pattern or explicit)
+        var targetUrl = specUrl ?? baseUrl;
+        if (GraphQLSchemaParser.LooksLikeGraphQLEndpoint(targetUrl))
+        {
+            return await RegisterGraphQLApiAsync(targetUrl, ct);
+        }
+
         // Discover spec URL if not provided
         if (string.IsNullOrEmpty(specUrl))
         {
@@ -54,14 +65,18 @@ public class ApiManagementService
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(ct);
 
-        // Detect if this is a Postman Collection or OpenAPI spec
+        // Detect format: Postman Collection, GraphQL SDL, or OpenAPI spec
         if (PostmanCollectionParser.IsPostmanCollection(content))
         {
             registration = _postmanParser.ParseFromJson(content, specUrl);
         }
+        else if (GraphQLSchemaParser.IsGraphQLSchema(content))
+        {
+            registration = _graphqlParser.ParseFromSdl(content, baseUrl);
+        }
         else
         {
-            // Parse as OpenAPI spec
+            // Parse as OpenAPI spec (handles both OpenAPI 3.x and Swagger 2.0)
             registration = await _parser.ParseAsync(specUrl, ct);
         }
 
@@ -226,5 +241,30 @@ public class ApiManagementService
 
         api.Auth = authConfig;
         return await _store.UpsertAsync(api, ct);
+    }
+
+    /// <summary>
+    /// Registers a GraphQL API by introspecting the endpoint.
+    /// </summary>
+    private async Task<ApiRegistration> RegisterGraphQLApiAsync(string graphqlUrl, CancellationToken ct)
+    {
+        var registration = await _graphqlParser.ParseFromEndpointAsync(graphqlUrl, ct);
+
+        // Check if API already exists
+        if (await _store.ExistsAsync(registration.Id, ct))
+        {
+            throw new InvalidOperationException($"API '{registration.Id}' is already registered.");
+        }
+
+        // Extract endpoints before saving
+        var endpoints = registration.Endpoints.ToList();
+
+        // Save API metadata to database
+        await _store.UpsertAsync(registration, ct);
+
+        // Save endpoints separately
+        await _store.SaveEndpointsAsync(registration.Id, endpoints, ct);
+
+        return registration;
     }
 }
