@@ -1,6 +1,7 @@
 using AnyAPI.Core.Auth;
 using AnyAPI.Core.Http;
 using AnyAPI.Core.OpenApi;
+using AnyAPI.Core.Postman;
 using AnyAPI.Core.Secrets;
 using AnyAPI.Core.Storage;
 using AnyAPI.Web.Components;
@@ -52,6 +53,7 @@ builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
 // Configure typed HTTP clients
 builder.Services.AddHttpClient<OpenApiParser>();
 builder.Services.AddHttpClient<OpenApiDiscovery>();
+builder.Services.AddHttpClient<PostmanCollectionParser>();
 builder.Services.AddHttpClient<DynamicApiClient>();
 
 // Register services - typed HttpClient services are transient by default

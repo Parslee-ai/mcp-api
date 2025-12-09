@@ -77,14 +77,14 @@
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label">OpenAPI Spec URL (optional)</label>
+                    <label class="form-label">API Spec URL (optional)</label>
                     <input type="url"
                            class="form-control"
                            placeholder="https://api.example.com/openapi.json"
                            @bind="specUrl"
                            disabled="@isProcessing" />
                     <small class="form-text text-muted">
-                        If auto-discovery doesn't work, provide the direct URL to the OpenAPI spec.
+                        Supports OpenAPI specs (JSON/YAML) and Postman Collections (v2.1). Format is auto-detected.
                     </small>
                 </div>
 
@@ -126,15 +126,17 @@
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Tips</h5>
+                <h5 class="mb-0">Supported Formats</h5>
             </div>
             <div class="card-body">
                 <ul class="mb-0">
-                    <li>The system will try to discover the OpenAPI spec at common locations.</li>
-                    <li>Supported formats: OpenAPI 3.0 and 3.1 (JSON or YAML).</li>
-                    <li>After registration, you can configure authentication.</li>
-                    <li>Endpoints can be individually enabled/disabled.</li>
+                    <li><strong>OpenAPI</strong> 3.0 and 3.1 (JSON or YAML)</li>
+                    <li><strong>Postman Collections</strong> v2.1 (JSON)</li>
                 </ul>
+                <hr class="my-2" />
+                <small class="text-muted">
+                    Format is auto-detected. After registration, configure authentication and enable/disable endpoints.
+                </small>
             </div>
         </div>
 

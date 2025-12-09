@@ -2,6 +2,7 @@ namespace AnyAPI.Web.Services;
 
 using AnyAPI.Core.Models;
 using AnyAPI.Core.OpenApi;
+using AnyAPI.Core.Postman;
 using AnyAPI.Core.Storage;
 
 /// <summary>
@@ -12,19 +13,23 @@ public class ApiManagementService
     private readonly IApiRegistrationStore _store;
     private readonly IOpenApiParser _parser;
     private readonly OpenApiDiscovery _discovery;
+    private readonly PostmanCollectionParser _postmanParser;
 
     public ApiManagementService(
         IApiRegistrationStore store,
         IOpenApiParser parser,
-        OpenApiDiscovery discovery)
+        OpenApiDiscovery discovery,
+        PostmanCollectionParser postmanParser)
     {
         _store = store;
         _parser = parser;
         _discovery = discovery;
+        _postmanParser = postmanParser;
     }
 
     /// <summary>
     /// Discovers and registers an API from a base URL.
+    /// Supports both OpenAPI specs and Postman Collections.
     /// </summary>
     public async Task<ApiRegistration> RegisterApiAsync(
         string baseUrl,
@@ -42,8 +47,23 @@ public class ApiManagementService
             }
         }
 
-        // Parse the OpenAPI spec
-        var registration = await _parser.ParseAsync(specUrl, ct);
+        // Fetch the spec to detect format
+        ApiRegistration registration;
+        using var httpClient = new HttpClient();
+        var response = await httpClient.GetAsync(specUrl, ct);
+        response.EnsureSuccessStatusCode();
+        var content = await response.Content.ReadAsStringAsync(ct);
+
+        // Detect if this is a Postman Collection or OpenAPI spec
+        if (PostmanCollectionParser.IsPostmanCollection(content))
+        {
+            registration = _postmanParser.ParseFromJson(content, specUrl);
+        }
+        else
+        {
+            // Parse as OpenAPI spec
+            registration = await _parser.ParseAsync(specUrl, ct);
+        }
 
         // Check if API already exists
         if (await _store.ExistsAsync(registration.Id, ct))
