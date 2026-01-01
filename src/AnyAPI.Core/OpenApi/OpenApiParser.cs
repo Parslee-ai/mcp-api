@@ -1,5 +1,7 @@
 namespace AnyAPI.Core.OpenApi;
 
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using AnyAPI.Core.Models;
 using Microsoft.OpenApi.Models;
@@ -79,7 +81,7 @@ public partial class OpenApiParser : IOpenApiParser
     private ApiRegistration ConvertDocument(OpenApiDocument doc)
     {
         var baseUrl = ExtractBaseUrl(doc);
-        var apiId = GenerateApiId(doc.Info.Title);
+        var apiId = GenerateApiId(doc.Info.Title, baseUrl);
 
         var registration = new ApiRegistration
         {
@@ -184,18 +186,26 @@ public partial class OpenApiParser : IOpenApiParser
         };
     }
 
-    private static string GenerateApiId(string title)
+    private static string GenerateApiId(string title, string baseUrl)
     {
         // Convert "GitHub REST API" -> "github-rest-api"
-        // Use full sanitized title to avoid collisions
         var cleaned = AlphanumericRegex().Replace(title.ToLowerInvariant(), " ");
         var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-        if (parts.Length == 0)
-            return "api";
+        var baseName = parts.Length == 0 ? "api" : string.Join("-", parts);
 
-        // Join all words with hyphens for uniqueness
-        return string.Join("-", parts);
+        // Add a short hash of the base URL to prevent collision attacks
+        // This ensures two APIs with the same title but different URLs get unique IDs
+        var urlHash = ComputeShortHash(baseUrl);
+
+        return $"{baseName}-{urlHash}";
+    }
+
+    private static string ComputeShortHash(string input)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        // Use first 4 bytes (8 hex chars) for a short but unique suffix
+        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
     }
 
     [GeneratedRegex("[^a-z0-9 ]")]

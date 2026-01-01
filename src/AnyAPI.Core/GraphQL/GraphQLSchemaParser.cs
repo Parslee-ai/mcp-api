@@ -1,6 +1,8 @@
 namespace AnyAPI.Core.GraphQL;
 
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AnyAPI.Core.Models;
@@ -500,7 +502,17 @@ public partial class GraphQLSchemaParser
         {
             slug = Regex.Replace(uri.Host.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
         }
-        return string.IsNullOrEmpty(slug) ? "graphql-api" : $"{slug}-graphql";
+        var baseName = string.IsNullOrEmpty(slug) ? "graphql-api" : $"{slug}-graphql";
+
+        // Add hash of input to prevent collision attacks
+        var urlHash = ComputeShortHash(input);
+        return $"{baseName}-{urlHash}";
+    }
+
+    private static string ComputeShortHash(string input)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
+        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
     }
 
     private static string ExtractNameFromUrl(string url)

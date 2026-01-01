@@ -143,7 +143,7 @@ public class GraphQLSchemaParserTests
 
         // Assert
         Assert.NotNull(registration);
-        Assert.Equal("test-api-graphql", registration.Id);
+        Assert.StartsWith("test-api-graphql-", registration.Id);
         Assert.Equal("Test API", registration.DisplayName);
         Assert.Equal("https://api.example.com/graphql", registration.BaseUrl);
         Assert.Equal("graphql-sdl", registration.OpenApiVersion);

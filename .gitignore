@@ -94,3 +94,6 @@ secrets.json
 credentials.json
 *.pfx
 *.p12
+
+# Editor/IDE local settings
+.claude/

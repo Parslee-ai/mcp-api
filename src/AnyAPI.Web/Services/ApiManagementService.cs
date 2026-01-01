@@ -5,6 +5,7 @@ using AnyAPI.Core.Models;
 using AnyAPI.Core.OpenApi;
 using AnyAPI.Core.Postman;
 using AnyAPI.Core.Storage;
+using AnyAPI.Core.Validation;
 
 /// <summary>
 /// Business logic service for managing API registrations.
@@ -16,19 +17,22 @@ public class ApiManagementService
     private readonly OpenApiDiscovery _discovery;
     private readonly PostmanCollectionParser _postmanParser;
     private readonly GraphQLSchemaParser _graphqlParser;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     public ApiManagementService(
         IApiRegistrationStore store,
         IOpenApiParser parser,
         OpenApiDiscovery discovery,
         PostmanCollectionParser postmanParser,
-        GraphQLSchemaParser graphqlParser)
+        GraphQLSchemaParser graphqlParser,
+        IHttpClientFactory httpClientFactory)
     {
         _store = store;
         _parser = parser;
         _discovery = discovery;
         _postmanParser = postmanParser;
         _graphqlParser = graphqlParser;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -40,6 +44,13 @@ public class ApiManagementService
         string? specUrl = null,
         CancellationToken ct = default)
     {
+        // Validate URLs to prevent SSRF attacks
+        UrlValidator.ValidateExternalUrl(baseUrl);
+        if (!string.IsNullOrEmpty(specUrl))
+        {
+            UrlValidator.ValidateExternalUrl(specUrl);
+        }
+
         // Check if this is a GraphQL endpoint (either by URL pattern or explicit)
         var targetUrl = specUrl ?? baseUrl;
         if (GraphQLSchemaParser.LooksLikeGraphQLEndpoint(targetUrl))
@@ -60,7 +71,7 @@ public class ApiManagementService
 
         // Fetch the spec to detect format
         ApiRegistration registration;
-        using var httpClient = new HttpClient();
+        using var httpClient = _httpClientFactory.CreateClient();
         var response = await httpClient.GetAsync(specUrl, ct);
         response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync(ct);

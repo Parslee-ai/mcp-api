@@ -156,7 +156,7 @@ public class PostmanCollectionParserTests
 
         // Assert
         Assert.NotNull(registration);
-        Assert.Equal("test-api-collection", registration.Id);
+        Assert.StartsWith("test-api-collection-", registration.Id);
         Assert.Equal("Test API Collection", registration.DisplayName);
         Assert.Equal("https://api.example.com", registration.BaseUrl);
         Assert.Equal(2, registration.Endpoints.Count);
