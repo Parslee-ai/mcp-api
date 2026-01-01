@@ -38,8 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Infrastructure
 
-- GitHub Actions CI pipeline
+- GitHub Actions CI pipeline with code coverage
+- Codecov integration for coverage tracking
 - Dependabot for automated dependency updates
+- GitHub issue and PR templates
 - EditorConfig for consistent code style
 - MIT License
 
