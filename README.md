@@ -1,5 +1,7 @@
 # AnyAPI
 
+[![CI](https://github.com/Parslee-ai/anyapi/actions/workflows/ci.yml/badge.svg)](https://github.com/Parslee-ai/anyapi/actions/workflows/ci.yml)
+
 A dynamic MCP (Model Context Protocol) server that exposes REST APIs as MCP tools. Register any API with an OpenAPI specification and let AI agents call it through a unified interface.
 
 ## Features
