@@ -34,7 +34,10 @@ public interface IApiRegistrationStore
     /// <summary>Gets a specific endpoint by API ID and endpoint ID.</summary>
     Task<ApiEndpoint?> GetEndpointAsync(string apiId, string endpointId, CancellationToken ct = default);
 
-    /// <summary>Saves all endpoints for an API (batch upsert).</summary>
+    /// <summary>
+    /// Saves all endpoints for an API (batch upsert).
+    /// Sets <see cref="ApiEndpoint.ApiId"/> on each endpoint.
+    /// </summary>
     Task SaveEndpointsAsync(string apiId, IEnumerable<ApiEndpoint> endpoints, CancellationToken ct = default);
 
     /// <summary>Updates a single endpoint.</summary>

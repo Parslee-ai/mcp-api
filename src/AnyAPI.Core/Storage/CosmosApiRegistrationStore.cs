@@ -143,6 +143,13 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         }
     }
 
+    /// <summary>
+    /// Saves endpoints to the endpoint container.
+    /// </summary>
+    /// <remarks>
+    /// This method sets <see cref="ApiEndpoint.ApiId"/> on each endpoint before saving.
+    /// Callers should be aware that input objects are modified.
+    /// </remarks>
     public async Task SaveEndpointsAsync(string apiId, IEnumerable<ApiEndpoint> endpoints, CancellationToken ct = default)
     {
         // Materialize to list to avoid multiple enumeration

@@ -163,6 +163,10 @@ public class OpenApiDiscovery
                    contentType.Contains("yaml") ||
                    contentType.Contains("text");
         }
+        catch (OperationCanceledException)
+        {
+            throw; // Propagate cancellation
+        }
         catch
         {
             return false;

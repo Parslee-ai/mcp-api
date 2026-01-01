@@ -68,8 +68,16 @@ public partial class OpenApiParser : IOpenApiParser
             throw new OpenApiParseException("Failed to parse OpenAPI spec: Document is null");
         }
 
-        return ConvertDocument(result.OpenApiDocument);
+        var specVersion = GetSpecVersionString(result.OpenApiDiagnostic.SpecificationVersion);
+        return ConvertDocument(result.OpenApiDocument, specVersion);
     }
+
+    private static string GetSpecVersionString(Microsoft.OpenApi.OpenApiSpecVersion version) => version switch
+    {
+        Microsoft.OpenApi.OpenApiSpecVersion.OpenApi2_0 => "2.0",
+        Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0 => "3.0",
+        _ => "3.0" // Default to 3.0 for unknown versions
+    };
 
     private static bool IsIgnorableValidationError(string message)
     {
@@ -78,7 +86,7 @@ public partial class OpenApiParser : IOpenApiParser
         return message.Contains("path signature") && message.Contains("MUST be unique");
     }
 
-    private ApiRegistration ConvertDocument(OpenApiDocument doc)
+    private ApiRegistration ConvertDocument(OpenApiDocument doc, string specVersion)
     {
         var baseUrl = ExtractBaseUrl(doc);
         var apiId = GenerateApiId(doc.Info.Title, baseUrl);
@@ -88,7 +96,7 @@ public partial class OpenApiParser : IOpenApiParser
             Id = apiId,
             DisplayName = doc.Info.Title,
             BaseUrl = baseUrl,
-            OpenApiVersion = doc.Info.Version,
+            OpenApiVersion = specVersion,
             ApiVersion = doc.Info.Version,
             Description = doc.Info.Description,
             Auth = ExtractAuthConfig(doc.Components?.SecuritySchemes, apiId),
