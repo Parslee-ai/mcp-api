@@ -10,7 +10,6 @@ using Microsoft.OpenApi.Models;
 /// </summary>
 public class SchemaFlattener
 {
-    private const int MaxDepth = 10;
 
     /// <summary>
     /// Flattens an OpenAPI schema into a JsonSchema.
@@ -28,7 +27,7 @@ public class SchemaFlattener
         }
 
         // Circular reference protection
-        if (depth > MaxDepth)
+        if (depth > Constants.Schema.MaxFlattenDepth)
         {
             return new JsonSchema { Type = "object", Description = "(max depth reached)" };
         }

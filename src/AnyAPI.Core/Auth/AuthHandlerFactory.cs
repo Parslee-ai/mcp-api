@@ -1,7 +1,6 @@
 namespace AnyAPI.Core.Auth;
 
 using System.Collections.Concurrent;
-using System.Net.Http;
 using AnyAPI.Core.Models;
 using AnyAPI.Core.Secrets;
 
@@ -48,14 +47,6 @@ public class AuthHandlerFactory : IAuthHandlerFactory
         var cacheKey = $"{config.TokenUrl}:{config.ClientId.SecretName}";
 
         return _oauth2Cache.GetOrAdd(cacheKey, _ =>
-            new OAuth2AuthHandler(config, _secretProvider, _httpClientFactory.CreateClient("OAuth2")));
+            new OAuth2AuthHandler(config, _secretProvider, _httpClientFactory.CreateClient(Constants.HttpClients.OAuth2)));
     }
-}
-
-/// <summary>
-/// Interface for the auth handler factory.
-/// </summary>
-public interface IAuthHandlerFactory
-{
-    IAuthHandler Create(AuthConfiguration config);
 }

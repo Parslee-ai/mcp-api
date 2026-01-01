@@ -1,11 +1,10 @@
 namespace AnyAPI.Core.GraphQL;
 
 using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AnyAPI.Core.Models;
+using AnyAPI.Core.Utilities;
 
 /// <summary>
 /// Parses GraphQL schemas into ApiRegistration.
@@ -496,23 +495,14 @@ public partial class GraphQLSchemaParser
 
     private static string GenerateId(string input)
     {
-        var slug = Regex.Replace(input.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
         // Extract domain-like part if it's a URL
-        if (Uri.TryCreate(input, UriKind.Absolute, out var uri))
-        {
-            slug = Regex.Replace(uri.Host.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
-        }
+        var slug = Uri.TryCreate(input, UriKind.Absolute, out var uri)
+            ? IdGenerator.ToSlug(uri.Host)
+            : IdGenerator.ToSlug(input);
+
         var baseName = string.IsNullOrEmpty(slug) ? "graphql-api" : $"{slug}-graphql";
-
-        // Add hash of input to prevent collision attacks
-        var urlHash = ComputeShortHash(input);
+        var urlHash = IdGenerator.ComputeShortHash(input);
         return $"{baseName}-{urlHash}";
-    }
-
-    private static string ComputeShortHash(string input)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
     }
 
     private static string ExtractNameFromUrl(string url)

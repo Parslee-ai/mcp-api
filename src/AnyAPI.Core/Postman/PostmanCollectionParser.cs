@@ -1,10 +1,9 @@
 namespace AnyAPI.Core.Postman;
 
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AnyAPI.Core.Models;
+using AnyAPI.Core.Utilities;
 
 /// <summary>
 /// Parses Postman Collection v2.1 format into ApiRegistration.
@@ -89,7 +88,7 @@ public class PostmanCollectionParser
             ?? throw new InvalidOperationException("Failed to parse Postman collection");
 
         var baseUrl = ExtractBaseUrl(collection);
-        var id = GenerateId(collection.Info.Name, sourceUrl ?? baseUrl);
+        var id = IdGenerator.GenerateApiId(collection.Info.Name, sourceUrl ?? baseUrl);
 
         var registration = new ApiRegistration
         {
@@ -466,31 +465,15 @@ public class PostmanCollectionParser
         };
     }
 
-    private static string? GetAuthParamValue(List<PostmanAuthParam>? params_, string key)
+    private static string? GetAuthParamValue(List<PostmanAuthParam>? authParams, string key)
     {
-        return params_?.FirstOrDefault(p =>
+        return authParams?.FirstOrDefault(p =>
             p.Key.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value;
-    }
-
-    private static string GenerateId(string name, string sourceUrl)
-    {
-        var slug = Regex.Replace(name.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
-        var baseName = string.IsNullOrEmpty(slug) ? "api" : slug;
-
-        // Add hash of source URL to prevent collision attacks
-        var urlHash = ComputeShortHash(sourceUrl);
-        return $"{baseName}-{urlHash}";
-    }
-
-    private static string ComputeShortHash(string input)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
     }
 
     private static string GenerateOperationId(string name, string method)
     {
-        var slug = Regex.Replace(name.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+        var slug = IdGenerator.ToSlug(name);
         return $"{method.ToLowerInvariant()}-{slug}";
     }
 

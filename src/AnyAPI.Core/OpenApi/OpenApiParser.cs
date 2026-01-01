@@ -1,16 +1,14 @@
 namespace AnyAPI.Core.OpenApi;
 
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
 using AnyAPI.Core.Models;
+using AnyAPI.Core.Utilities;
 using Microsoft.OpenApi.Models;
 using Microsoft.OpenApi.Readers;
 
 /// <summary>
 /// Parses OpenAPI specifications into ApiRegistration models.
 /// </summary>
-public partial class OpenApiParser : IOpenApiParser
+public class OpenApiParser : IOpenApiParser
 {
     private readonly HttpClient _httpClient;
     private readonly OperationConverter _operationConverter;
@@ -89,7 +87,7 @@ public partial class OpenApiParser : IOpenApiParser
     private ApiRegistration ConvertDocument(OpenApiDocument doc, string specVersion)
     {
         var baseUrl = ExtractBaseUrl(doc);
-        var apiId = GenerateApiId(doc.Info.Title, baseUrl);
+        var apiId = IdGenerator.GenerateApiId(doc.Info.Title, baseUrl);
 
         var registration = new ApiRegistration
         {
@@ -194,28 +192,4 @@ public partial class OpenApiParser : IOpenApiParser
         };
     }
 
-    private static string GenerateApiId(string title, string baseUrl)
-    {
-        // Convert "GitHub REST API" -> "github-rest-api"
-        var cleaned = AlphanumericRegex().Replace(title.ToLowerInvariant(), " ");
-        var parts = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-        var baseName = parts.Length == 0 ? "api" : string.Join("-", parts);
-
-        // Add a short hash of the base URL to prevent collision attacks
-        // This ensures two APIs with the same title but different URLs get unique IDs
-        var urlHash = ComputeShortHash(baseUrl);
-
-        return $"{baseName}-{urlHash}";
-    }
-
-    private static string ComputeShortHash(string input)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
-        // Use first 4 bytes (8 hex chars) for a short but unique suffix
-        return Convert.ToHexString(bytes, 0, 4).ToLowerInvariant();
-    }
-
-    [GeneratedRegex("[^a-z0-9 ]")]
-    private static partial Regex AlphanumericRegex();
 }

@@ -37,15 +37,15 @@ public class OAuth2AuthHandler : IAuthHandler
 
     public async Task<bool> RefreshIfNeededAsync(CancellationToken ct = default)
     {
-        // Check if refresh needed (with 30s buffer)
-        if (_accessToken != null && DateTime.UtcNow < _tokenExpiry.AddSeconds(-30))
+        // Check if refresh needed (with buffer before expiry)
+        if (_accessToken != null && DateTime.UtcNow < _tokenExpiry.AddSeconds(-Constants.OAuth2.TokenRefreshBufferSeconds))
             return false;
 
         await _refreshLock.WaitAsync(ct);
         try
         {
             // Double-check after acquiring lock
-            if (_accessToken != null && DateTime.UtcNow < _tokenExpiry.AddSeconds(-30))
+            if (_accessToken != null && DateTime.UtcNow < _tokenExpiry.AddSeconds(-Constants.OAuth2.TokenRefreshBufferSeconds))
                 return false;
 
             var clientId = await _secretProvider.GetSecretAsync(_config.ClientId.SecretName, ct);

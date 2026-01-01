@@ -31,7 +31,7 @@ public static class CosmosContainerFactory
         // Define container properties
         var containerProperties = new ContainerProperties
         {
-            Id = "api-registrations",
+            Id = Constants.Cosmos.ApiRegistrations,
             PartitionKeyPath = "/id",
             IndexingPolicy = new IndexingPolicy
             {

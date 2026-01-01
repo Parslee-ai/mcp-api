@@ -1,6 +1,5 @@
 namespace AnyAPI.Core.Http;
 
-using System.Net.Http;
 using AnyAPI.Core.Auth;
 using AnyAPI.Core.Models;
 
@@ -32,11 +31,11 @@ public class DynamicApiClient : IApiClient
         await authHandler.ApplyAuthAsync(request, ct);
 
         // Add common headers
-        request.Headers.TryAddWithoutValidation("User-Agent", "AnyAPI/1.0");
+        request.Headers.TryAddWithoutValidation("User-Agent", Constants.Http.UserAgent);
         request.Headers.TryAddWithoutValidation("Accept", "application/json");
 
         // Execute request using a fresh HttpClient from the factory
-        using var httpClient = _httpClientFactory.CreateClient("DynamicApi");
+        using var httpClient = _httpClientFactory.CreateClient(Constants.HttpClients.DynamicApi);
         var response = await httpClient.SendAsync(request, ct);
 
         // Build response

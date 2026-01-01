@@ -24,8 +24,8 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         };
 
         _client = new CosmosClient(connectionString, options);
-        _apiContainer = _client.GetContainer(databaseName, "api-registrations");
-        _endpointContainer = _client.GetContainer(databaseName, "api-endpoints");
+        _apiContainer = _client.GetContainer(databaseName, Constants.Cosmos.ApiRegistrations);
+        _endpointContainer = _client.GetContainer(databaseName, Constants.Cosmos.ApiEndpoints);
     }
 
     public async Task<ApiRegistration?> GetAsync(string id, CancellationToken ct = default)
@@ -157,7 +157,7 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         if (endpointList.Count == 0) return;
 
         // Batch upsert endpoints in parallel with throttling
-        var semaphore = new SemaphoreSlim(10); // Max 10 concurrent operations
+        var semaphore = new SemaphoreSlim(Constants.Cosmos.BatchConcurrency);
         var tasks = new List<Task>();
         var exceptions = new List<Exception>();
 
