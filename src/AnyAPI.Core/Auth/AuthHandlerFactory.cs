@@ -1,6 +1,7 @@
 namespace AnyAPI.Core.Auth;
 
 using System.Collections.Concurrent;
+using System.Net.Http;
 using AnyAPI.Core.Models;
 using AnyAPI.Core.Secrets;
 
@@ -11,13 +12,13 @@ using AnyAPI.Core.Secrets;
 public class AuthHandlerFactory : IAuthHandlerFactory
 {
     private readonly ISecretProvider _secretProvider;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ConcurrentDictionary<string, OAuth2AuthHandler> _oauth2Cache = new();
 
-    public AuthHandlerFactory(ISecretProvider secretProvider, HttpClient httpClient)
+    public AuthHandlerFactory(ISecretProvider secretProvider, IHttpClientFactory httpClientFactory)
     {
         _secretProvider = secretProvider;
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
     }
 
     public IAuthHandler Create(AuthConfiguration config)
@@ -47,7 +48,7 @@ public class AuthHandlerFactory : IAuthHandlerFactory
         var cacheKey = $"{config.TokenUrl}:{config.ClientId.SecretName}";
 
         return _oauth2Cache.GetOrAdd(cacheKey, _ =>
-            new OAuth2AuthHandler(config, _secretProvider, _httpClient));
+            new OAuth2AuthHandler(config, _secretProvider, _httpClientFactory.CreateClient("OAuth2")));
     }
 }
 

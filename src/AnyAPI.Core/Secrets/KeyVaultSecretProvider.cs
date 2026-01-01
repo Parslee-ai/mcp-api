@@ -7,11 +7,12 @@ using Microsoft.Extensions.Caching.Memory;
 /// <summary>
 /// Azure Key Vault implementation of ISecretProvider with in-memory caching.
 /// </summary>
-public class KeyVaultSecretProvider : ISecretProvider
+public class KeyVaultSecretProvider : ISecretProvider, IDisposable
 {
     private readonly SecretClient _client;
     private readonly MemoryCache _cache;
     private readonly TimeSpan _cacheDuration;
+    private bool _disposed;
 
     public KeyVaultSecretProvider(SecretProviderOptions options)
     {
@@ -55,5 +56,12 @@ public class KeyVaultSecretProvider : ISecretProvider
     {
         await _client.StartDeleteSecretAsync(secretName, ct);
         _cache.Remove(secretName);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _cache.Dispose();
+        _disposed = true;
     }
 }

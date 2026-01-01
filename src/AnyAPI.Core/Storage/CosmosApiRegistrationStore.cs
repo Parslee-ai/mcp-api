@@ -73,9 +73,23 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
 
     public async Task DeleteAsync(string id, CancellationToken ct = default)
     {
-        // Delete all endpoints first
+        // Delete API registration first - if this fails, no orphaned endpoints are created
+        // Endpoints without a parent API are harmless and can be cleaned up later
+        try
+        {
+            await _apiContainer.DeleteItemAsync<ApiRegistration>(
+                id,
+                new PartitionKey(id),
+                cancellationToken: ct);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            // Already deleted - still try to clean up any orphaned endpoints
+        }
+
+        // Delete all endpoints (best effort cleanup)
         var endpoints = await GetEndpointsAsync(id, ct);
-        foreach (var endpoint in endpoints)
+        var deleteTasks = endpoints.Select(async endpoint =>
         {
             try
             {
@@ -88,20 +102,9 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
             {
                 // Already deleted
             }
-        }
+        });
 
-        // Delete the API registration
-        try
-        {
-            await _apiContainer.DeleteItemAsync<ApiRegistration>(
-                id,
-                new PartitionKey(id),
-                cancellationToken: ct);
-        }
-        catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-        {
-            // Already deleted
-        }
+        await Task.WhenAll(deleteTasks);
     }
 
     public async Task<bool> ExistsAsync(string id, CancellationToken ct = default)
@@ -258,9 +261,71 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         return results;
     }
 
-    public async ValueTask DisposeAsync()
+    public async Task<IReadOnlyList<EndpointSearchResult>> SearchEndpointsAsync(
+        string query,
+        int limit = 20,
+        CancellationToken ct = default)
+    {
+        // Get enabled APIs first (small set, cached in practice)
+        var enabledApis = await GetEnabledAsync(ct);
+        var apiLookup = enabledApis.ToDictionary(a => a.Id, a => a.DisplayName);
+        var apiIds = apiLookup.Keys.ToList();
+
+        if (apiIds.Count == 0)
+            return [];
+
+        // Build parameterized query for enabled endpoints matching the search
+        var queryLower = query.ToLowerInvariant();
+        var queryDef = new QueryDefinition(
+            @"SELECT c.apiId, c.operationId, c.method, c.path, c.summary
+              FROM c
+              WHERE c.isEnabled = true
+              AND ARRAY_CONTAINS(@apiIds, c.apiId)
+              AND (CONTAINS(LOWER(c.operationId), @query)
+                   OR CONTAINS(LOWER(c.path), @query)
+                   OR CONTAINS(LOWER(c.summary), @query))")
+            .WithParameter("@apiIds", apiIds)
+            .WithParameter("@query", queryLower);
+
+        var results = new List<EndpointSearchResult>();
+        using var iterator = _endpointContainer.GetItemQueryIterator<EndpointSearchMatch>(
+            queryDef,
+            requestOptions: new QueryRequestOptions { MaxItemCount = limit });
+
+        while (iterator.HasMoreResults && results.Count < limit)
+        {
+            var response = await iterator.ReadNextAsync(ct);
+            foreach (var match in response)
+            {
+                if (results.Count >= limit) break;
+                if (apiLookup.TryGetValue(match.ApiId, out var apiName))
+                {
+                    results.Add(new EndpointSearchResult(
+                        match.ApiId,
+                        apiName,
+                        match.OperationId,
+                        match.Method,
+                        match.Path,
+                        match.Summary));
+                }
+            }
+        }
+
+        return results;
+    }
+
+    private sealed class EndpointSearchMatch
+    {
+        public string ApiId { get; set; } = "";
+        public string OperationId { get; set; } = "";
+        public string Method { get; set; } = "";
+        public string Path { get; set; } = "";
+        public string? Summary { get; set; }
+    }
+
+    public ValueTask DisposeAsync()
     {
         _client.Dispose();
-        await Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 }

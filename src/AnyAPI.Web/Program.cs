@@ -51,17 +51,17 @@ builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
     return new CosmosApiRegistrationStore(connectionString, databaseName);
 });
 
-// Configure typed HTTP clients
+// Configure HTTP clients
+builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<OpenApiParser>();
 builder.Services.AddHttpClient<OpenApiDiscovery>();
 builder.Services.AddHttpClient<PostmanCollectionParser>();
 builder.Services.AddHttpClient<GraphQLSchemaParser>();
-builder.Services.AddHttpClient<DynamicApiClient>();
 
-// Register services - typed HttpClient services are transient by default
+// Register services
 builder.Services.AddTransient<IOpenApiParser>(sp => sp.GetRequiredService<OpenApiParser>());
-builder.Services.AddTransient<IApiClient>(sp => sp.GetRequiredService<DynamicApiClient>());
 builder.Services.AddSingleton<IAuthHandlerFactory, AuthHandlerFactory>();
+builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
 builder.Services.AddScoped<ApiManagementService>();
 
 var app = builder.Build();

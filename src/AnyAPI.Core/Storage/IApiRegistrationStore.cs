@@ -45,4 +45,18 @@ public interface IApiRegistrationStore
 
     /// <summary>Gets enabled endpoint count for an API.</summary>
     Task<int> GetEnabledEndpointCountAsync(string apiId, CancellationToken ct = default);
+
+    /// <summary>Searches enabled endpoints across all enabled APIs.</summary>
+    Task<IReadOnlyList<EndpointSearchResult>> SearchEndpointsAsync(string query, int limit = 20, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Result of an endpoint search including API context.
+/// </summary>
+public record EndpointSearchResult(
+    string ApiId,
+    string ApiName,
+    string OperationId,
+    string Method,
+    string Path,
+    string? Summary);

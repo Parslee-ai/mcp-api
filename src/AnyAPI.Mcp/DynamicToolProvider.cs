@@ -132,35 +132,10 @@ public class DynamicToolProvider
         [Description("Search query (searches operation IDs, paths, and summaries)")] string query,
         CancellationToken ct = default)
     {
-        var apis = await _store.GetEnabledAsync(ct);
-        var queryLower = query.ToLowerInvariant();
+        // Single query across all endpoints instead of N+1
+        var results = await _store.SearchEndpointsAsync(query, limit: 20, ct);
 
-        var matches = new List<object>();
-        foreach (var api in apis)
-        {
-            // Load endpoints separately for each API
-            var endpoints = await _store.GetEndpointsAsync(api.Id, ct);
-            var apiMatches = endpoints
-                .Where(e => e.IsEnabled)
-                .Where(e =>
-                    e.OperationId.Contains(queryLower, StringComparison.OrdinalIgnoreCase) ||
-                    e.Path.Contains(queryLower, StringComparison.OrdinalIgnoreCase) ||
-                    (e.Summary?.Contains(queryLower, StringComparison.OrdinalIgnoreCase) ?? false))
-                .Select(e => new
-                {
-                    ApiId = api.Id,
-                    ApiName = api.DisplayName,
-                    e.OperationId,
-                    e.Method,
-                    e.Path,
-                    e.Summary
-                });
-            matches.AddRange(apiMatches);
-            if (matches.Count >= 20) break;
-        }
-
-        var result = matches.Take(20).ToList();
-        return JsonSerializer.Serialize(new { count = result.Count, results = result },
+        return JsonSerializer.Serialize(new { count = results.Count, results },
             new JsonSerializerOptions { WriteIndented = true });
     }
 

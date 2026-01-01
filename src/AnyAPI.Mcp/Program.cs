@@ -29,7 +29,7 @@ builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IAuthHandlerFactory, AuthHandlerFactory>();
 builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
-builder.Services.AddSingleton<DynamicToolProvider>();
+builder.Services.AddScoped<DynamicToolProvider>();
 
 // Configure MCP Server
 builder.Services
