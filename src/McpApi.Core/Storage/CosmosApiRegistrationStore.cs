@@ -1,13 +1,12 @@
 namespace McpApi.Core.Storage;
 
 using System.Net;
-using System.Text.Json;
 using McpApi.Core.Models;
 using Microsoft.Azure.Cosmos;
 
 /// <summary>
-/// Cosmos DB implementation of IApiRegistrationStore.
-/// Uses separate containers for API metadata and endpoints to handle large specs.
+/// Cosmos DB implementation of IApiRegistrationStore with multi-tenant support.
+/// Uses userId as partition key for tenant isolation.
 /// </summary>
 public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposable
 {
@@ -28,13 +27,13 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         _endpointContainer = _client.GetContainer(databaseName, Constants.Cosmos.ApiEndpoints);
     }
 
-    public async Task<ApiRegistration?> GetAsync(string id, CancellationToken ct = default)
+    public async Task<ApiRegistration?> GetAsync(string userId, string id, CancellationToken ct = default)
     {
         try
         {
             var response = await _apiContainer.ReadItemAsync<ApiRegistration>(
                 id,
-                new PartitionKey(id),
+                new PartitionKey(userId),
                 cancellationToken: ct);
             return response.Resource;
         }
@@ -44,16 +43,18 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         }
     }
 
-    public async Task<IReadOnlyList<ApiRegistration>> GetAllAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiRegistration>> GetAllAsync(string userId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT * FROM c");
-        return await ExecuteApiQueryAsync(query, ct);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId")
+            .WithParameter("@userId", userId);
+        return await ExecuteApiQueryAsync(query, userId, ct);
     }
 
-    public async Task<IReadOnlyList<ApiRegistration>> GetEnabledAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiRegistration>> GetEnabledAsync(string userId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.isEnabled = true");
-        return await ExecuteApiQueryAsync(query, ct);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId AND c.isEnabled = true")
+            .WithParameter("@userId", userId);
+        return await ExecuteApiQueryAsync(query, userId, ct);
     }
 
     public async Task<ApiRegistration> UpsertAsync(ApiRegistration registration, CancellationToken ct = default)
@@ -63,7 +64,7 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
 
         var response = await _apiContainer.UpsertItemAsync(
             registration,
-            new PartitionKey(registration.Id),
+            new PartitionKey(registration.UserId),
             new ItemRequestOptions { IfMatchEtag = registration.ETag },
             ct);
 
@@ -71,15 +72,14 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         return registration;
     }
 
-    public async Task DeleteAsync(string id, CancellationToken ct = default)
+    public async Task DeleteAsync(string userId, string id, CancellationToken ct = default)
     {
         // Delete API registration first - if this fails, no orphaned endpoints are created
-        // Endpoints without a parent API are harmless and can be cleaned up later
         try
         {
             await _apiContainer.DeleteItemAsync<ApiRegistration>(
                 id,
-                new PartitionKey(id),
+                new PartitionKey(userId),
                 cancellationToken: ct);
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -88,14 +88,14 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         }
 
         // Delete all endpoints (best effort cleanup)
-        var endpoints = await GetEndpointsAsync(id, ct);
+        var endpoints = await GetEndpointsAsync(userId, id, ct);
         var deleteTasks = endpoints.Select(async endpoint =>
         {
             try
             {
                 await _endpointContainer.DeleteItemAsync<ApiEndpoint>(
                     endpoint.Id,
-                    new PartitionKey(id),
+                    new PartitionKey(userId),
                     cancellationToken: ct);
             }
             catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -107,34 +107,41 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         await Task.WhenAll(deleteTasks);
     }
 
-    public async Task<bool> ExistsAsync(string id, CancellationToken ct = default)
+    public async Task<bool> ExistsAsync(string userId, string id, CancellationToken ct = default)
     {
-        var registration = await GetAsync(id, ct);
+        var registration = await GetAsync(userId, id, ct);
         return registration != null;
     }
 
-    public async Task<IReadOnlyList<ApiEndpoint>> GetEndpointsAsync(string apiId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiEndpoint>> GetEndpointsAsync(string userId, string apiId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.apiId = @apiId")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId AND c.apiId = @apiId")
+            .WithParameter("@userId", userId)
             .WithParameter("@apiId", apiId);
-        return await ExecuteEndpointQueryAsync(query, ct);
+        return await ExecuteEndpointQueryAsync(query, userId, ct);
     }
 
-    public async Task<IReadOnlyList<ApiEndpoint>> GetEnabledEndpointsAsync(string apiId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ApiEndpoint>> GetEnabledEndpointsAsync(string userId, string apiId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT * FROM c WHERE c.apiId = @apiId AND c.isEnabled = true")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId AND c.apiId = @apiId AND c.isEnabled = true")
+            .WithParameter("@userId", userId)
             .WithParameter("@apiId", apiId);
-        return await ExecuteEndpointQueryAsync(query, ct);
+        return await ExecuteEndpointQueryAsync(query, userId, ct);
     }
 
-    public async Task<ApiEndpoint?> GetEndpointAsync(string apiId, string endpointId, CancellationToken ct = default)
+    public async Task<ApiEndpoint?> GetEndpointAsync(string userId, string apiId, string endpointId, CancellationToken ct = default)
     {
         try
         {
             var response = await _endpointContainer.ReadItemAsync<ApiEndpoint>(
                 endpointId,
-                new PartitionKey(apiId),
+                new PartitionKey(userId),
                 cancellationToken: ct);
+
+            // Verify the endpoint belongs to the specified API
+            if (response.Resource.ApiId != apiId)
+                return null;
+
             return response.Resource;
         }
         catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -146,11 +153,7 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
     /// <summary>
     /// Saves endpoints to the endpoint container.
     /// </summary>
-    /// <remarks>
-    /// This method sets <see cref="ApiEndpoint.ApiId"/> on each endpoint before saving.
-    /// Callers should be aware that input objects are modified.
-    /// </remarks>
-    public async Task SaveEndpointsAsync(string apiId, IEnumerable<ApiEndpoint> endpoints, CancellationToken ct = default)
+    public async Task SaveEndpointsAsync(string userId, string apiId, IEnumerable<ApiEndpoint> endpoints, CancellationToken ct = default)
     {
         // Materialize to list to avoid multiple enumeration
         var endpointList = endpoints.ToList();
@@ -164,17 +167,18 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         foreach (var endpoint in endpointList)
         {
             endpoint.ApiId = apiId;
+            endpoint.UserId = userId;
 
             await semaphore.WaitAsync(ct);
 
-            var capturedEndpoint = endpoint; // Capture for closure
+            var capturedEndpoint = endpoint;
             tasks.Add(Task.Run(async () =>
             {
                 try
                 {
                     await _endpointContainer.UpsertItemAsync(
                         capturedEndpoint,
-                        new PartitionKey(apiId),
+                        new PartitionKey(userId),
                         cancellationToken: ct);
                 }
                 catch (Exception ex)
@@ -203,17 +207,20 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
     {
         var response = await _endpointContainer.UpsertItemAsync(
             endpoint,
-            new PartitionKey(endpoint.ApiId),
+            new PartitionKey(endpoint.UserId),
             cancellationToken: ct);
         return response.Resource;
     }
 
-    public async Task<int> GetEndpointCountAsync(string apiId, CancellationToken ct = default)
+    public async Task<int> GetEndpointCountAsync(string userId, string apiId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.apiId = @apiId")
+        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.userId = @userId AND c.apiId = @apiId")
+            .WithParameter("@userId", userId)
             .WithParameter("@apiId", apiId);
 
-        using var iterator = _endpointContainer.GetItemQueryIterator<int>(query);
+        using var iterator = _endpointContainer.GetItemQueryIterator<int>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
         if (iterator.HasMoreResults)
         {
             var response = await iterator.ReadNextAsync(ct);
@@ -222,12 +229,31 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         return 0;
     }
 
-    public async Task<int> GetEnabledEndpointCountAsync(string apiId, CancellationToken ct = default)
+    public async Task<int> GetEnabledEndpointCountAsync(string userId, string apiId, CancellationToken ct = default)
     {
-        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.apiId = @apiId AND c.isEnabled = true")
+        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.userId = @userId AND c.apiId = @apiId AND c.isEnabled = true")
+            .WithParameter("@userId", userId)
             .WithParameter("@apiId", apiId);
 
-        using var iterator = _endpointContainer.GetItemQueryIterator<int>(query);
+        using var iterator = _endpointContainer.GetItemQueryIterator<int>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
+        if (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(ct);
+            return response.FirstOrDefault();
+        }
+        return 0;
+    }
+
+    public async Task<int> GetApiCountAsync(string userId, CancellationToken ct = default)
+    {
+        var query = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.userId = @userId")
+            .WithParameter("@userId", userId);
+
+        using var iterator = _apiContainer.GetItemQueryIterator<int>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
         if (iterator.HasMoreResults)
         {
             var response = await iterator.ReadNextAsync(ct);
@@ -238,10 +264,13 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
 
     private async Task<IReadOnlyList<ApiRegistration>> ExecuteApiQueryAsync(
         QueryDefinition query,
+        string userId,
         CancellationToken ct)
     {
         var results = new List<ApiRegistration>();
-        using var iterator = _apiContainer.GetItemQueryIterator<ApiRegistration>(query);
+        using var iterator = _apiContainer.GetItemQueryIterator<ApiRegistration>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
 
         while (iterator.HasMoreResults)
         {
@@ -254,10 +283,13 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
 
     private async Task<IReadOnlyList<ApiEndpoint>> ExecuteEndpointQueryAsync(
         QueryDefinition query,
+        string userId,
         CancellationToken ct)
     {
         var results = new List<ApiEndpoint>();
-        using var iterator = _endpointContainer.GetItemQueryIterator<ApiEndpoint>(query);
+        using var iterator = _endpointContainer.GetItemQueryIterator<ApiEndpoint>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
 
         while (iterator.HasMoreResults)
         {
@@ -269,12 +301,13 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
     }
 
     public async Task<IReadOnlyList<EndpointSearchResult>> SearchEndpointsAsync(
+        string userId,
         string query,
         int limit = 20,
         CancellationToken ct = default)
     {
-        // Get enabled APIs first (small set, cached in practice)
-        var enabledApis = await GetEnabledAsync(ct);
+        // Get enabled APIs first
+        var enabledApis = await GetEnabledAsync(userId, ct);
         var apiLookup = enabledApis.ToDictionary(a => a.Id, a => a.DisplayName);
         var apiIds = apiLookup.Keys.ToList();
 
@@ -286,18 +319,24 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         var queryDef = new QueryDefinition(
             @"SELECT c.apiId, c.operationId, c.method, c.path, c.summary
               FROM c
-              WHERE c.isEnabled = true
+              WHERE c.userId = @userId
+              AND c.isEnabled = true
               AND ARRAY_CONTAINS(@apiIds, c.apiId)
               AND (CONTAINS(LOWER(c.operationId), @query)
                    OR CONTAINS(LOWER(c.path), @query)
                    OR CONTAINS(LOWER(c.summary), @query))")
+            .WithParameter("@userId", userId)
             .WithParameter("@apiIds", apiIds)
             .WithParameter("@query", queryLower);
 
         var results = new List<EndpointSearchResult>();
         using var iterator = _endpointContainer.GetItemQueryIterator<EndpointSearchMatch>(
             queryDef,
-            requestOptions: new QueryRequestOptions { MaxItemCount = limit });
+            requestOptions: new QueryRequestOptions
+            {
+                MaxItemCount = limit,
+                PartitionKey = new PartitionKey(userId)
+            });
 
         while (iterator.HasMoreResults && results.Count < limit)
         {

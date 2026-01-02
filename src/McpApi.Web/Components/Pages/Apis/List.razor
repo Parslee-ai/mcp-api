@@ -1,11 +1,13 @@
 @page "/apis"
 @using McpApi.Core.Models
 @using McpApi.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject ApiManagementService ApiService
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
-<PageTitle>APIs - AnyAPI</PageTitle>
+<PageTitle>APIs - MCP-API</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1>Registered APIs</h1>

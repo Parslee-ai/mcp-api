@@ -1,11 +1,13 @@
 @page "/apis/{ApiId}"
 @using McpApi.Core.Models
 @using McpApi.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject ApiManagementService ApiService
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
-<PageTitle>@(api?.DisplayName ?? "API Details") - AnyAPI</PageTitle>
+<PageTitle>@(api?.DisplayName ?? "API Details") - MCP-API</PageTitle>
 
 @if (isLoading)
 {

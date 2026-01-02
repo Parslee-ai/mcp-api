@@ -1,13 +1,15 @@
 @page "/"
 @using McpApi.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject ApiManagementService ApiService
 @rendermode InteractiveServer
 
-<PageTitle>AnyAPI Dashboard</PageTitle>
+<PageTitle>MCP-API Dashboard</PageTitle>
 
-<h1>AnyAPI Dashboard</h1>
+<h1>MCP-API Dashboard</h1>
 
-<p class="lead">Dynamic MCP Server for any REST API</p>
+<p class="lead">Create MCPs from any REST API</p>
 
 @if (isLoading)
 {
@@ -84,9 +86,12 @@ else
                 <div class="card-body">
                     <p class="text-muted">Add this to your MCP client configuration:</p>
                     <pre class="bg-light p-2 rounded"><code>{
-  "anyapi": {
+  "mcpapi": {
     "command": "dotnet",
-    "args": ["run", "--project", "path/to/AnyAPI.Mcp"]
+    "args": ["run", "--project", "path/to/McpApi.Mcp"],
+    "env": {
+      "MCPAPI_USER_ID": "your-user-id"
+    }
   }
 }</code></pre>
                 </div>

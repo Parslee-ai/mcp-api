@@ -24,11 +24,14 @@ builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
     new CosmosApiRegistrationStore(
         builder.Configuration["Cosmos:ConnectionString"]
             ?? throw new InvalidOperationException("Cosmos:ConnectionString not configured"),
-        builder.Configuration["Cosmos:DatabaseName"] ?? "anyapi"));
+        builder.Configuration["Cosmos:DatabaseName"] ?? "mcpapi"));
 
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<IAuthHandlerFactory, AuthHandlerFactory>();
 builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
+
+// User context for multi-tenancy (Phase 6 will add token auth)
+builder.Services.AddSingleton<IMcpCurrentUser, EnvironmentMcpCurrentUser>();
 builder.Services.AddScoped<DynamicToolProvider>();
 
 // Configure MCP Server
@@ -37,7 +40,7 @@ builder.Services
     {
         options.ServerInfo = new()
         {
-            Name = "AnyAPI",
+            Name = "McpApi",
             Version = "1.0.0"
         };
     })

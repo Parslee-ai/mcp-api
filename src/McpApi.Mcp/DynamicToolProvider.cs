@@ -9,22 +9,27 @@ using ModelContextProtocol.Server;
 
 /// <summary>
 /// Provides MCP tools dynamically from registered API specifications.
+/// All operations are scoped to the authenticated user.
 /// </summary>
 public class DynamicToolProvider
 {
     private readonly IApiRegistrationStore _store;
     private readonly IApiClient _apiClient;
+    private readonly IMcpCurrentUser _currentUser;
 
-    public DynamicToolProvider(IApiRegistrationStore store, IApiClient apiClient)
+    public DynamicToolProvider(IApiRegistrationStore store, IApiClient apiClient, IMcpCurrentUser currentUser)
     {
         _store = store;
         _apiClient = apiClient;
+        _currentUser = currentUser;
     }
+
+    private string UserId => _currentUser.UserId;
 
     [McpServerTool, Description("List all available API tools")]
     public async Task<string> ListAvailableApis(CancellationToken ct = default)
     {
-        var apis = await _store.GetEnabledAsync(ct);
+        var apis = await _store.GetEnabledAsync(UserId, ct);
         var result = apis.Select(a => new
         {
             a.Id,
@@ -42,12 +47,12 @@ public class DynamicToolProvider
         [Description("Parameters as JSON object")] string? parametersJson = null,
         CancellationToken ct = default)
     {
-        var api = await _store.GetAsync(apiId, ct);
+        var api = await _store.GetAsync(UserId, apiId, ct);
         if (api == null)
             return JsonSerializer.Serialize(new { error = $"API '{apiId}' not found" });
 
         // Load endpoints separately (they're stored in a different container)
-        var endpoints = await _store.GetEndpointsAsync(apiId, ct);
+        var endpoints = await _store.GetEndpointsAsync(UserId, apiId, ct);
         var endpoint = endpoints.FirstOrDefault(e =>
             e.OperationId.Equals(operationId, StringComparison.OrdinalIgnoreCase) ||
             e.Id.Equals(operationId, StringComparison.OrdinalIgnoreCase));
@@ -89,12 +94,12 @@ public class DynamicToolProvider
         [Description("API ID (e.g., 'github')")] string apiId,
         CancellationToken ct = default)
     {
-        var api = await _store.GetAsync(apiId, ct);
+        var api = await _store.GetAsync(UserId, apiId, ct);
         if (api == null)
             return JsonSerializer.Serialize(new { error = $"API '{apiId}' not found" });
 
         // Load endpoints separately (they're stored in a different container)
-        var endpoints = await _store.GetEndpointsAsync(apiId, ct);
+        var endpoints = await _store.GetEndpointsAsync(UserId, apiId, ct);
 
         var result = new
         {
@@ -133,7 +138,7 @@ public class DynamicToolProvider
         CancellationToken ct = default)
     {
         // Single query across all endpoints instead of N+1
-        var results = await _store.SearchEndpointsAsync(query, limit: 20, ct);
+        var results = await _store.SearchEndpointsAsync(UserId, query, limit: 20, ct);
 
         return JsonSerializer.Serialize(new { count = results.Count, results },
             new JsonSerializerOptions { WriteIndented = true });

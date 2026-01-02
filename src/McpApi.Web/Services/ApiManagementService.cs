@@ -9,6 +9,7 @@ using McpApi.Core.Validation;
 
 /// <summary>
 /// Business logic service for managing API registrations.
+/// Requires authenticated user context for multi-tenant isolation.
 /// </summary>
 public class ApiManagementService
 {
@@ -18,6 +19,7 @@ public class ApiManagementService
     private readonly PostmanCollectionParser _postmanParser;
     private readonly GraphQLSchemaParser _graphqlParser;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ICurrentUserService _currentUser;
 
     public ApiManagementService(
         IApiRegistrationStore store,
@@ -25,7 +27,8 @@ public class ApiManagementService
         OpenApiDiscovery discovery,
         PostmanCollectionParser postmanParser,
         GraphQLSchemaParser graphqlParser,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        ICurrentUserService currentUser)
     {
         _store = store;
         _parser = parser;
@@ -33,6 +36,13 @@ public class ApiManagementService
         _postmanParser = postmanParser;
         _graphqlParser = graphqlParser;
         _httpClientFactory = httpClientFactory;
+        _currentUser = currentUser;
+    }
+
+    private string GetRequiredUserId()
+    {
+        return _currentUser.UserId
+            ?? throw new InvalidOperationException("User must be authenticated to perform this operation.");
     }
 
     /// <summary>
@@ -91,11 +101,16 @@ public class ApiManagementService
             registration = await _parser.ParseAsync(specUrl, ct);
         }
 
-        // Check if API already exists
-        if (await _store.ExistsAsync(registration.Id, ct))
+        var userId = GetRequiredUserId();
+
+        // Check if API already exists for this user
+        if (await _store.ExistsAsync(userId, registration.Id, ct))
         {
             throw new InvalidOperationException($"API '{registration.Id}' is already registered.");
         }
+
+        // Set user ownership
+        registration.UserId = userId;
 
         // Extract endpoints before saving (they'll be stored separately)
         var endpoints = registration.Endpoints.ToList();
@@ -104,32 +119,33 @@ public class ApiManagementService
         await _store.UpsertAsync(registration, ct);
 
         // Save endpoints separately
-        await _store.SaveEndpointsAsync(registration.Id, endpoints, ct);
+        await _store.SaveEndpointsAsync(userId, registration.Id, endpoints, ct);
 
         return registration;
     }
 
     /// <summary>
-    /// Gets all registered APIs.
+    /// Gets all registered APIs for the current user.
     /// </summary>
     public Task<IReadOnlyList<ApiRegistration>> GetAllApisAsync(CancellationToken ct = default)
-        => _store.GetAllAsync(ct);
+        => _store.GetAllAsync(GetRequiredUserId(), ct);
 
     /// <summary>
-    /// Gets a specific API by ID.
+    /// Gets a specific API by ID for the current user.
     /// </summary>
     public Task<ApiRegistration?> GetApiAsync(string id, CancellationToken ct = default)
-        => _store.GetAsync(id, ct);
+        => _store.GetAsync(GetRequiredUserId(), id, ct);
 
     /// <summary>
-    /// Gets a specific API by ID with its endpoints loaded.
+    /// Gets a specific API by ID with its endpoints loaded for the current user.
     /// </summary>
     public async Task<ApiRegistration?> GetApiWithEndpointsAsync(string id, CancellationToken ct = default)
     {
-        var api = await _store.GetAsync(id, ct);
+        var userId = GetRequiredUserId();
+        var api = await _store.GetAsync(userId, id, ct);
         if (api != null)
         {
-            var endpoints = await _store.GetEndpointsAsync(id, ct);
+            var endpoints = await _store.GetEndpointsAsync(userId, id, ct);
             api.Endpoints = endpoints.ToList();
         }
         return api;
@@ -139,38 +155,47 @@ public class ApiManagementService
     /// Gets endpoints for an API.
     /// </summary>
     public Task<IReadOnlyList<ApiEndpoint>> GetEndpointsAsync(string apiId, CancellationToken ct = default)
-        => _store.GetEndpointsAsync(apiId, ct);
+        => _store.GetEndpointsAsync(GetRequiredUserId(), apiId, ct);
 
     /// <summary>
     /// Gets endpoint count for an API.
     /// </summary>
     public Task<int> GetEndpointCountAsync(string apiId, CancellationToken ct = default)
-        => _store.GetEndpointCountAsync(apiId, ct);
+        => _store.GetEndpointCountAsync(GetRequiredUserId(), apiId, ct);
 
     /// <summary>
     /// Gets enabled endpoint count for an API.
     /// </summary>
     public Task<int> GetEnabledEndpointCountAsync(string apiId, CancellationToken ct = default)
-        => _store.GetEnabledEndpointCountAsync(apiId, ct);
+        => _store.GetEnabledEndpointCountAsync(GetRequiredUserId(), apiId, ct);
 
     /// <summary>
     /// Updates an API registration.
     /// </summary>
     public Task<ApiRegistration> UpdateApiAsync(ApiRegistration api, CancellationToken ct = default)
-        => _store.UpsertAsync(api, ct);
+    {
+        // Ensure the API belongs to the current user
+        var userId = GetRequiredUserId();
+        if (api.UserId != userId)
+        {
+            throw new InvalidOperationException("Cannot update an API that belongs to another user.");
+        }
+        return _store.UpsertAsync(api, ct);
+    }
 
     /// <summary>
     /// Deletes an API registration.
     /// </summary>
     public Task DeleteApiAsync(string id, CancellationToken ct = default)
-        => _store.DeleteAsync(id, ct);
+        => _store.DeleteAsync(GetRequiredUserId(), id, ct);
 
     /// <summary>
     /// Toggles the enabled status of an API.
     /// </summary>
     public async Task<ApiRegistration> ToggleApiAsync(string id, bool enabled, CancellationToken ct = default)
     {
-        var api = await _store.GetAsync(id, ct)
+        var userId = GetRequiredUserId();
+        var api = await _store.GetAsync(userId, id, ct)
             ?? throw new InvalidOperationException($"API '{id}' not found.");
 
         api.IsEnabled = enabled;
@@ -186,7 +211,8 @@ public class ApiManagementService
         bool enabled,
         CancellationToken ct = default)
     {
-        var endpoint = await _store.GetEndpointAsync(apiId, endpointId, ct)
+        var userId = GetRequiredUserId();
+        var endpoint = await _store.GetEndpointAsync(userId, apiId, endpointId, ct)
             ?? throw new InvalidOperationException($"Endpoint '{endpointId}' not found in API '{apiId}'.");
 
         endpoint.IsEnabled = enabled;
@@ -198,7 +224,8 @@ public class ApiManagementService
     /// </summary>
     public async Task<ApiRegistration> RefreshApiAsync(string id, CancellationToken ct = default)
     {
-        var existingApi = await _store.GetAsync(id, ct)
+        var userId = GetRequiredUserId();
+        var existingApi = await _store.GetAsync(userId, id, ct)
             ?? throw new InvalidOperationException($"API '{id}' not found.");
 
         if (string.IsNullOrEmpty(existingApi.SpecUrl))
@@ -207,13 +234,14 @@ public class ApiManagementService
         }
 
         // Get existing endpoints to preserve enabled states
-        var existingEndpoints = await _store.GetEndpointsAsync(id, ct);
+        var existingEndpoints = await _store.GetEndpointsAsync(userId, id, ct);
 
         var refreshedApi = await _parser.ParseAsync(existingApi.SpecUrl, ct);
         var newEndpoints = refreshedApi.Endpoints.ToList();
 
         // Preserve settings from existing API
         refreshedApi.Id = existingApi.Id;
+        refreshedApi.UserId = userId;
         refreshedApi.IsEnabled = existingApi.IsEnabled;
         refreshedApi.Auth = existingApi.Auth;
         refreshedApi.CreatedAt = existingApi.CreatedAt;
@@ -234,7 +262,7 @@ public class ApiManagementService
         await _store.UpsertAsync(refreshedApi, ct);
 
         // Save endpoints
-        await _store.SaveEndpointsAsync(id, newEndpoints, ct);
+        await _store.SaveEndpointsAsync(userId, id, newEndpoints, ct);
 
         return refreshedApi;
     }
@@ -247,7 +275,8 @@ public class ApiManagementService
         AuthConfiguration authConfig,
         CancellationToken ct = default)
     {
-        var api = await _store.GetAsync(id, ct)
+        var userId = GetRequiredUserId();
+        var api = await _store.GetAsync(userId, id, ct)
             ?? throw new InvalidOperationException($"API '{id}' not found.");
 
         api.Auth = authConfig;
@@ -259,13 +288,17 @@ public class ApiManagementService
     /// </summary>
     private async Task<ApiRegistration> RegisterGraphQLApiAsync(string graphqlUrl, CancellationToken ct)
     {
+        var userId = GetRequiredUserId();
         var registration = await _graphqlParser.ParseFromEndpointAsync(graphqlUrl, ct);
 
-        // Check if API already exists
-        if (await _store.ExistsAsync(registration.Id, ct))
+        // Check if API already exists for this user
+        if (await _store.ExistsAsync(userId, registration.Id, ct))
         {
             throw new InvalidOperationException($"API '{registration.Id}' is already registered.");
         }
+
+        // Set user ownership
+        registration.UserId = userId;
 
         // Extract endpoints before saving
         var endpoints = registration.Endpoints.ToList();
@@ -274,7 +307,7 @@ public class ApiManagementService
         await _store.UpsertAsync(registration, ct);
 
         // Save endpoints separately
-        await _store.SaveEndpointsAsync(registration.Id, endpoints, ct);
+        await _store.SaveEndpointsAsync(userId, registration.Id, endpoints, ct);
 
         return registration;
     }

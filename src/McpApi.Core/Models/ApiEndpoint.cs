@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 
 /// <summary>
 /// Represents a single API endpoint/operation that becomes an MCP tool.
-/// Stored in separate Cosmos container with apiId as partition key.
+/// Stored in separate Cosmos container with userId as partition key for multi-tenancy.
 /// </summary>
 public class ApiEndpoint
 {
@@ -12,9 +12,13 @@ public class ApiEndpoint
     [JsonPropertyName("id")]
     public required string Id { get; set; }
 
-    /// <summary>Parent API registration ID (partition key). Set when saving to store.</summary>
+    /// <summary>Parent API registration ID. Set when saving to store.</summary>
     [JsonPropertyName("apiId")]
     public string ApiId { get; set; } = "";
+
+    /// <summary>Owner user ID (partition key for multi-tenancy).</summary>
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = "";
 
     /// <summary>OpenAPI operation ID.</summary>
     public required string OperationId { get; set; }

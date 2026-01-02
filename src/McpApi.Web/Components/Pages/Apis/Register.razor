@@ -2,12 +2,14 @@
 @using McpApi.Core.Models
 @using McpApi.Core.OpenApi
 @using McpApi.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
 @inject ApiManagementService ApiService
 @inject OpenApiDiscovery Discovery
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
 
-<PageTitle>Register API - AnyAPI</PageTitle>
+<PageTitle>Register API - MCP-API</PageTitle>
 
 <h1>Register New API</h1>
 

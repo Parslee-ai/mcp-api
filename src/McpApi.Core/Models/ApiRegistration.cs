@@ -4,13 +4,17 @@ using System.Text.Json.Serialization;
 
 /// <summary>
 /// Root entity representing a registered API in the system.
-/// Stored in Cosmos DB with partition key on Id.
+/// Stored in Cosmos DB with partition key on UserId for multi-tenancy.
 /// </summary>
 public class ApiRegistration
 {
     /// <summary>Unique identifier (e.g., "github", "stripe", "openai").</summary>
     [JsonPropertyName("id")]
     public required string Id { get; set; }
+
+    /// <summary>Owner user ID (partition key for multi-tenancy). Set by service before saving.</summary>
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = "";
 
     /// <summary>Display name for the dashboard.</summary>
     public required string DisplayName { get; set; }
