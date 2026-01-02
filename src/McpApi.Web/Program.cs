@@ -5,6 +5,7 @@ using McpApi.Core.Notifications;
 using McpApi.Core.OpenApi;
 using McpApi.Core.Postman;
 using McpApi.Core.Secrets;
+using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using McpApi.Web.Components;
 using McpApi.Web.Services;
@@ -104,6 +105,20 @@ builder.Services.AddSingleton<IUserStore>(sp =>
 {
     var cosmosClient = sp.GetRequiredService<CosmosClient>();
     return new CosmosUserStore(cosmosClient, databaseName);
+});
+
+// Configure usage tracking
+builder.Services.AddSingleton<IUsageStore>(sp =>
+{
+    var cosmosClient = sp.GetRequiredService<CosmosClient>();
+    return new CosmosUsageStore(cosmosClient, databaseName);
+});
+
+builder.Services.AddSingleton<IUsageTrackingService>(sp =>
+{
+    var usageStore = sp.GetRequiredService<IUsageStore>();
+    var apiStore = sp.GetRequiredService<IApiRegistrationStore>();
+    return new UsageTrackingService(usageStore, apiStore);
 });
 
 // Configure notification services

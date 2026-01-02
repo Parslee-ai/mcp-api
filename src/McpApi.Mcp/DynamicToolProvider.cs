@@ -4,27 +4,35 @@ using System.ComponentModel;
 using System.Text.Json;
 using McpApi.Core.Http;
 using McpApi.Core.Models;
+using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using ModelContextProtocol.Server;
 
 /// <summary>
 /// Provides MCP tools dynamically from registered API specifications.
-/// All operations are scoped to the authenticated user.
+/// All operations are scoped to the authenticated user with usage tracking.
 /// </summary>
 public class DynamicToolProvider
 {
     private readonly IApiRegistrationStore _store;
     private readonly IApiClient _apiClient;
     private readonly IMcpCurrentUser _currentUser;
+    private readonly IUsageTrackingService _usageTracking;
 
-    public DynamicToolProvider(IApiRegistrationStore store, IApiClient apiClient, IMcpCurrentUser currentUser)
+    public DynamicToolProvider(
+        IApiRegistrationStore store,
+        IApiClient apiClient,
+        IMcpCurrentUser currentUser,
+        IUsageTrackingService usageTracking)
     {
         _store = store;
         _apiClient = apiClient;
         _currentUser = currentUser;
+        _usageTracking = usageTracking;
     }
 
     private string UserId => _currentUser.UserId;
+    private string UserTier => _currentUser.Tier;
 
     [McpServerTool, Description("List all available API tools")]
     public async Task<string> ListAvailableApis(CancellationToken ct = default)
@@ -47,6 +55,23 @@ public class DynamicToolProvider
         [Description("Parameters as JSON object")] string? parametersJson = null,
         CancellationToken ct = default)
     {
+        // Check usage limits before making the call
+        try
+        {
+            await _usageTracking.CheckAndRecordApiCallAsync(UserId, UserTier, ct);
+        }
+        catch (UsageLimitExceededException ex)
+        {
+            return JsonSerializer.Serialize(new
+            {
+                error = "Usage limit exceeded",
+                limitType = ex.LimitType,
+                currentUsage = ex.CurrentUsage,
+                limit = ex.Limit,
+                message = $"You have reached your {ex.LimitType} limit ({ex.Limit}). Upgrade your plan to continue."
+            });
+        }
+
         var api = await _store.GetAsync(UserId, apiId, ct);
         if (api == null)
             return JsonSerializer.Serialize(new { error = $"API '{apiId}' not found" });
@@ -142,6 +167,30 @@ public class DynamicToolProvider
 
         return JsonSerializer.Serialize(new { count = results.Count, results },
             new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    [McpServerTool, Description("Get your current usage and remaining quota")]
+    public async Task<string> GetUsage(CancellationToken ct = default)
+    {
+        var summary = await _usageTracking.GetUsageSummaryAsync(UserId, UserTier, ct);
+
+        return JsonSerializer.Serialize(new
+        {
+            tier = summary.Tier,
+            month = summary.YearMonth,
+            apiCalls = new
+            {
+                used = summary.ApiCallsUsed,
+                limit = summary.ApiCallsLimit == int.MaxValue ? "unlimited" : summary.ApiCallsLimit.ToString(),
+                remaining = summary.ApiCallsRemaining == int.MaxValue ? "unlimited" : summary.ApiCallsRemaining.ToString()
+            },
+            apis = new
+            {
+                registered = summary.ApisRegistered,
+                limit = summary.ApisLimit == int.MaxValue ? "unlimited" : summary.ApisLimit.ToString(),
+                remaining = summary.ApisRemaining == int.MaxValue ? "unlimited" : summary.ApisRemaining.ToString()
+            }
+        }, new JsonSerializerOptions { WriteIndented = true });
     }
 
     private static object? ConvertJsonElement(JsonElement element)

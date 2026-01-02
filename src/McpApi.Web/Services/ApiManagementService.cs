@@ -4,6 +4,7 @@ using McpApi.Core.GraphQL;
 using McpApi.Core.Models;
 using McpApi.Core.OpenApi;
 using McpApi.Core.Postman;
+using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using McpApi.Core.Validation;
 
@@ -20,6 +21,7 @@ public class ApiManagementService
     private readonly GraphQLSchemaParser _graphqlParser;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICurrentUserService _currentUser;
+    private readonly IUsageTrackingService _usageTracking;
 
     public ApiManagementService(
         IApiRegistrationStore store,
@@ -28,7 +30,8 @@ public class ApiManagementService
         PostmanCollectionParser postmanParser,
         GraphQLSchemaParser graphqlParser,
         IHttpClientFactory httpClientFactory,
-        ICurrentUserService currentUser)
+        ICurrentUserService currentUser,
+        IUsageTrackingService usageTracking)
     {
         _store = store;
         _parser = parser;
@@ -37,12 +40,37 @@ public class ApiManagementService
         _graphqlParser = graphqlParser;
         _httpClientFactory = httpClientFactory;
         _currentUser = currentUser;
+        _usageTracking = usageTracking;
     }
 
     private string GetRequiredUserId()
     {
         return _currentUser.UserId
             ?? throw new InvalidOperationException("User must be authenticated to perform this operation.");
+    }
+
+    private async Task<string> GetUserTierAsync(CancellationToken ct = default)
+    {
+        var user = await _currentUser.GetCurrentUserAsync(ct);
+        return user?.Tier ?? "free";
+    }
+
+    private async Task CheckApiLimitsAsync(string userId, string userTier, int endpointCount, CancellationToken ct)
+    {
+        var currentApiCount = await _store.GetApiCountAsync(userId, ct);
+        if (!_usageTracking.CanRegisterApi(userTier, currentApiCount))
+        {
+            var (_, maxApis, _) = TierLimits.GetLimits(userTier);
+            throw new UsageLimitExceededException("APIs", currentApiCount, maxApis);
+        }
+
+        var (_, _, maxEndpoints) = TierLimits.GetLimits(userTier);
+        if (maxEndpoints != int.MaxValue && endpointCount > maxEndpoints)
+        {
+            throw new InvalidOperationException(
+                $"This API has {endpointCount} endpoints, which exceeds your tier limit of {maxEndpoints}. " +
+                "Upgrade your plan to register APIs with more endpoints.");
+        }
     }
 
     /// <summary>
@@ -102,6 +130,7 @@ public class ApiManagementService
         }
 
         var userId = GetRequiredUserId();
+        var userTier = await GetUserTierAsync(ct);
 
         // Check if API already exists for this user
         if (await _store.ExistsAsync(userId, registration.Id, ct))
@@ -109,11 +138,14 @@ public class ApiManagementService
             throw new InvalidOperationException($"API '{registration.Id}' is already registered.");
         }
 
-        // Set user ownership
-        registration.UserId = userId;
-
         // Extract endpoints before saving (they'll be stored separately)
         var endpoints = registration.Endpoints.ToList();
+
+        // Check usage limits (API count and endpoint count)
+        await CheckApiLimitsAsync(userId, userTier, endpoints.Count, ct);
+
+        // Set user ownership
+        registration.UserId = userId;
 
         // Save API metadata to database
         await _store.UpsertAsync(registration, ct);
@@ -289,6 +321,7 @@ public class ApiManagementService
     private async Task<ApiRegistration> RegisterGraphQLApiAsync(string graphqlUrl, CancellationToken ct)
     {
         var userId = GetRequiredUserId();
+        var userTier = await GetUserTierAsync(ct);
         var registration = await _graphqlParser.ParseFromEndpointAsync(graphqlUrl, ct);
 
         // Check if API already exists for this user
@@ -297,11 +330,14 @@ public class ApiManagementService
             throw new InvalidOperationException($"API '{registration.Id}' is already registered.");
         }
 
-        // Set user ownership
-        registration.UserId = userId;
-
         // Extract endpoints before saving
         var endpoints = registration.Endpoints.ToList();
+
+        // Check usage limits (API count and endpoint count)
+        await CheckApiLimitsAsync(userId, userTier, endpoints.Count, ct);
+
+        // Set user ownership
+        registration.UserId = userId;
 
         // Save API metadata to database
         await _store.UpsertAsync(registration, ct);

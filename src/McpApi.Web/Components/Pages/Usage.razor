@@ -1,0 +1,251 @@
+@page "/usage"
+@using McpApi.Core.Models
+@using McpApi.Core.Services
+@using McpApi.Web.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject ICurrentUserService CurrentUserService
+@inject IUsageTrackingService UsageTrackingService
+@rendermode InteractiveServer
+
+<PageTitle>Usage - MCP-API</PageTitle>
+
+<h1 class="mb-4">Usage & Limits</h1>
+
+@if (isLoading)
+{
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (error != null)
+{
+    <div class="alert alert-danger">@error</div>
+}
+else if (summary != null)
+{
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Subscription Tier</h5>
+                    <p class="display-6 mb-0">
+                        <span class="badge @GetTierBadgeClass(summary.Tier)">@summary.Tier.ToUpperInvariant()</span>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title text-muted">Billing Period</h5>
+                    <p class="display-6 mb-0">@FormatMonth(summary.YearMonth)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column justify-content-center align-items-center">
+                    @if (summary.Tier == "free")
+                    {
+                        <a href="#" class="btn btn-primary">Upgrade to Pro</a>
+                    }
+                    else if (summary.Tier == "pro")
+                    {
+                        <a href="#" class="btn btn-outline-primary">Upgrade to Enterprise</a>
+                    }
+                    else
+                    {
+                        <span class="text-success">Enterprise Plan</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">API Calls This Month</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="h3 mb-0">@summary.ApiCallsUsed.ToString("N0")</span>
+                        <span class="text-muted">
+                            / @FormatLimit(summary.ApiCallsLimit)
+                        </span>
+                    </div>
+                    @if (summary.ApiCallsLimit != int.MaxValue)
+                    {
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar @GetProgressBarClass(summary.ApiCallsUsed, summary.ApiCallsLimit)"
+                                 role="progressbar"
+                                 style="width: @GetProgressPercentage(summary.ApiCallsUsed, summary.ApiCallsLimit)%"
+                                 aria-valuenow="@summary.ApiCallsUsed"
+                                 aria-valuemin="0"
+                                 aria-valuemax="@summary.ApiCallsLimit">
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            @FormatRemaining(summary.ApiCallsRemaining) remaining
+                        </small>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success">Unlimited</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">Registered APIs</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="h3 mb-0">@summary.ApisRegistered</span>
+                        <span class="text-muted">
+                            / @FormatLimit(summary.ApisLimit)
+                        </span>
+                    </div>
+                    @if (summary.ApisLimit != int.MaxValue)
+                    {
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar @GetProgressBarClass(summary.ApisRegistered, summary.ApisLimit)"
+                                 role="progressbar"
+                                 style="width: @GetProgressPercentage(summary.ApisRegistered, summary.ApisLimit)%"
+                                 aria-valuenow="@summary.ApisRegistered"
+                                 aria-valuemin="0"
+                                 aria-valuemax="@summary.ApisLimit">
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block">
+                            @FormatRemaining(summary.ApisRemaining) remaining
+                        </small>
+                    }
+                    else
+                    {
+                        <span class="badge bg-success">Unlimited</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Tier Comparison</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Feature</th>
+                        <th class="@(summary.Tier == "free" ? "table-primary" : "")">Free</th>
+                        <th class="@(summary.Tier == "pro" ? "table-primary" : "")">Pro</th>
+                        <th class="@(summary.Tier == "enterprise" ? "table-primary" : "")">Enterprise</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>API Calls / Month</td>
+                        <td class="@(summary.Tier == "free" ? "table-primary" : "")">1,000</td>
+                        <td class="@(summary.Tier == "pro" ? "table-primary" : "")">50,000</td>
+                        <td class="@(summary.Tier == "enterprise" ? "table-primary" : "")">Unlimited</td>
+                    </tr>
+                    <tr>
+                        <td>Registered APIs</td>
+                        <td class="@(summary.Tier == "free" ? "table-primary" : "")">3</td>
+                        <td class="@(summary.Tier == "pro" ? "table-primary" : "")">25</td>
+                        <td class="@(summary.Tier == "enterprise" ? "table-primary" : "")">Unlimited</td>
+                    </tr>
+                    <tr>
+                        <td>Endpoints per API</td>
+                        <td class="@(summary.Tier == "free" ? "table-primary" : "")">50</td>
+                        <td class="@(summary.Tier == "pro" ? "table-primary" : "")">500</td>
+                        <td class="@(summary.Tier == "enterprise" ? "table-primary" : "")">Unlimited</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private UsageSummary? summary;
+    private bool isLoading = true;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsage();
+    }
+
+    private async Task LoadUsage()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            var user = await CurrentUserService.GetCurrentUserAsync();
+            if (user != null)
+            {
+                summary = await UsageTrackingService.GetUsageSummaryAsync(user.Id, user.Tier);
+            }
+            else
+            {
+                error = "User not authenticated.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Failed to load usage: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string GetTierBadgeClass(string tier) => tier.ToLowerInvariant() switch
+    {
+        "pro" => "bg-primary",
+        "enterprise" => "bg-success",
+        _ => "bg-secondary"
+    };
+
+    private static string FormatMonth(string yearMonth)
+    {
+        if (DateTime.TryParseExact(yearMonth, "yyyy-MM", null, System.Globalization.DateTimeStyles.None, out var date))
+        {
+            return date.ToString("MMMM yyyy");
+        }
+        return yearMonth;
+    }
+
+    private static string FormatLimit(int limit) => limit == int.MaxValue ? "Unlimited" : limit.ToString("N0");
+
+    private static string FormatRemaining(int remaining) => remaining == int.MaxValue ? "Unlimited" : remaining.ToString("N0");
+
+    private static double GetProgressPercentage(int used, int limit)
+    {
+        if (limit == 0 || limit == int.MaxValue) return 0;
+        return Math.Min(100, (double)used / limit * 100);
+    }
+
+    private static string GetProgressBarClass(int used, int limit)
+    {
+        if (limit == int.MaxValue) return "bg-success";
+        var percentage = (double)used / limit * 100;
+        return percentage switch
+        {
+            >= 90 => "bg-danger",
+            >= 75 => "bg-warning",
+            _ => "bg-primary"
+        };
+    }
+}

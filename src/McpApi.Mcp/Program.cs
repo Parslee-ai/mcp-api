@@ -1,8 +1,10 @@
 using McpApi.Core.Auth;
 using McpApi.Core.Http;
 using McpApi.Core.Secrets;
+using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using McpApi.Mcp;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using ModelContextProtocol.Server;
@@ -52,6 +54,33 @@ builder.Services.AddSingleton<IAuthHandlerFactory>(sp =>
     return new AuthHandlerFactory(secretResolver, httpClientFactory);
 });
 builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
+
+// Configure Cosmos client for usage tracking
+builder.Services.AddSingleton(_ =>
+{
+    var options = new CosmosClientOptions
+    {
+        SerializerOptions = new CosmosSerializationOptions
+        {
+            PropertyNamingPolicy = CosmosPropertyNamingPolicy.CamelCase
+        }
+    };
+    return new CosmosClient(cosmosConnectionString, options);
+});
+
+// Configure usage tracking
+builder.Services.AddSingleton<IUsageStore>(sp =>
+{
+    var cosmosClient = sp.GetRequiredService<CosmosClient>();
+    return new CosmosUsageStore(cosmosClient, databaseName);
+});
+
+builder.Services.AddSingleton<IUsageTrackingService>(sp =>
+{
+    var usageStore = sp.GetRequiredService<IUsageStore>();
+    var apiStore = sp.GetRequiredService<IApiRegistrationStore>();
+    return new UsageTrackingService(usageStore, apiStore);
+});
 
 // User context for multi-tenancy (Phase 6 will add token auth)
 builder.Services.AddSingleton<IMcpCurrentUser, EnvironmentMcpCurrentUser>();

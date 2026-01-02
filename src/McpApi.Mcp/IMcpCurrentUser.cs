@@ -15,6 +15,11 @@ public interface IMcpCurrentUser
     string UserId { get; }
 
     /// <summary>
+    /// Gets the user's subscription tier (free, pro, enterprise).
+    /// </summary>
+    string Tier { get; }
+
+    /// <summary>
     /// Gets the user's secret context for decrypting API secrets.
     /// May be null if encryption is not configured.
     /// </summary>
@@ -22,12 +27,13 @@ public interface IMcpCurrentUser
 }
 
 /// <summary>
-/// Simple implementation that reads user ID and encryption salt from environment variables.
+/// Simple implementation that reads user context from environment variables.
 /// Will be replaced with token-based auth in Phase 6.
 /// </summary>
 public class EnvironmentMcpCurrentUser : IMcpCurrentUser
 {
     private readonly string _userId;
+    private readonly string _tier;
     private readonly UserSecretContext? _secretContext;
 
     public EnvironmentMcpCurrentUser()
@@ -37,6 +43,8 @@ public class EnvironmentMcpCurrentUser : IMcpCurrentUser
                 "MCPAPI_USER_ID environment variable is required. " +
                 "In Phase 6, this will be replaced with token-based authentication.");
 
+        _tier = Environment.GetEnvironmentVariable("MCPAPI_USER_TIER") ?? "free";
+
         var encryptionSalt = Environment.GetEnvironmentVariable("MCPAPI_ENCRYPTION_SALT");
         if (!string.IsNullOrEmpty(encryptionSalt))
         {
@@ -45,5 +53,6 @@ public class EnvironmentMcpCurrentUser : IMcpCurrentUser
     }
 
     public string UserId => _userId;
+    public string Tier => _tier;
     public UserSecretContext? SecretContext => _secretContext;
 }
