@@ -78,7 +78,7 @@ public class DynamicToolProvider
             };
         }
 
-        var response = await _apiClient.ExecuteAsync(api, endpoint, convertedParams, ct);
+        var response = await _apiClient.ExecuteAsync(api, endpoint, convertedParams, _currentUser.SecretContext, ct);
 
         return JsonSerializer.Serialize(new
         {

@@ -67,7 +67,35 @@ builder.Services.AddSingleton<SecretProviderOptions>(sp =>
         VaultUri = keyVaultUri ?? ""
     });
 
-builder.Services.AddSingleton<ISecretProvider, KeyVaultSecretProvider>();
+// Key Vault secret provider (optional - for legacy secrets)
+ISecretProvider? keyVaultProvider = null;
+if (!string.IsNullOrEmpty(keyVaultUri))
+{
+    keyVaultProvider = new KeyVaultSecretProvider(new SecretProviderOptions { VaultUri = keyVaultUri });
+    builder.Services.AddSingleton(keyVaultProvider);
+}
+
+// Configure encryption service
+var masterKeySecretName = builder.Configuration["Encryption:MasterKeySecretName"] ?? "mcpapi-master-encryption-key";
+var masterKey = builder.Configuration[masterKeySecretName]
+    ?? builder.Configuration["Encryption:MasterKey"];
+
+if (string.IsNullOrEmpty(masterKey))
+{
+    // Generate a development key (not secure for production)
+    Console.WriteLine("[WARNING] No encryption master key configured. Using development key - DO NOT USE IN PRODUCTION.");
+    masterKey = Convert.ToBase64String(new byte[32]); // Zero key for dev
+}
+
+builder.Services.AddSingleton<IEncryptionService>(new AesGcmEncryptionService(masterKey));
+
+// Configure secret resolver (handles both encrypted and Key Vault secrets)
+builder.Services.AddSingleton<ISecretResolver>(sp =>
+{
+    var encryptionService = sp.GetRequiredService<IEncryptionService>();
+    var kvProvider = sp.GetService<ISecretProvider>(); // Optional
+    return new SecretResolver(encryptionService, kvProvider);
+});
 
 builder.Services.AddSingleton<IApiRegistrationStore>(sp =>
     new CosmosApiRegistrationStore(connectionString!, databaseName));
@@ -124,7 +152,12 @@ builder.Services.AddHttpClient<GraphQLSchemaParser>();
 
 // Register services
 builder.Services.AddTransient<IOpenApiParser>(sp => sp.GetRequiredService<OpenApiParser>());
-builder.Services.AddSingleton<IAuthHandlerFactory, AuthHandlerFactory>();
+builder.Services.AddSingleton<IAuthHandlerFactory>(sp =>
+{
+    var secretResolver = sp.GetRequiredService<ISecretResolver>();
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    return new AuthHandlerFactory(secretResolver, httpClientFactory);
+});
 builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
 builder.Services.AddScoped<ApiManagementService>();
 

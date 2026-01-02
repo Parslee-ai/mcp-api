@@ -2,6 +2,7 @@ namespace McpApi.Core.Http;
 
 using McpApi.Core.Auth;
 using McpApi.Core.Models;
+using McpApi.Core.Secrets;
 
 /// <summary>
 /// HTTP client for executing dynamic API calls.
@@ -21,13 +22,14 @@ public class DynamicApiClient : IApiClient
         ApiRegistration api,
         ApiEndpoint endpoint,
         Dictionary<string, object?> parameters,
+        UserSecretContext? userContext = null,
         CancellationToken ct = default)
     {
         // Build request
         var request = RequestBuilder.Build(api.BaseUrl, endpoint, parameters);
 
         // Apply authentication
-        var authHandler = CreateAuthHandler(api);
+        var authHandler = CreateAuthHandler(api, userContext);
         await authHandler.ApplyAuthAsync(request, ct);
 
         // Add common headers
@@ -56,10 +58,10 @@ public class DynamicApiClient : IApiClient
         };
     }
 
-    private IAuthHandler CreateAuthHandler(ApiRegistration api)
+    private IAuthHandler CreateAuthHandler(ApiRegistration api, UserSecretContext? userContext)
     {
         // Create a fresh auth handler each time to ensure config changes are respected
-        // Auth handlers rely on ISecretProvider's internal cache for performance
-        return _authHandlerFactory.Create(api.Auth);
+        // Auth handlers rely on ISecretResolver's internal cache for performance
+        return _authHandlerFactory.Create(api.Auth, userContext);
     }
 }

@@ -12,7 +12,8 @@ using McpApi.Core.Secrets;
 public class OAuth2AuthHandler : IAuthHandler
 {
     private readonly OAuth2AuthConfig _config;
-    private readonly ISecretProvider _secretProvider;
+    private readonly ISecretResolver _secretResolver;
+    private readonly UserSecretContext? _userContext;
     private readonly HttpClient _httpClient;
 
     private string? _accessToken;
@@ -21,11 +22,13 @@ public class OAuth2AuthHandler : IAuthHandler
 
     public OAuth2AuthHandler(
         OAuth2AuthConfig config,
-        ISecretProvider secretProvider,
+        ISecretResolver secretResolver,
+        UserSecretContext? userContext,
         HttpClient httpClient)
     {
         _config = config;
-        _secretProvider = secretProvider;
+        _secretResolver = secretResolver;
+        _userContext = userContext;
         _httpClient = httpClient;
     }
 
@@ -48,8 +51,8 @@ public class OAuth2AuthHandler : IAuthHandler
             if (_accessToken != null && DateTime.UtcNow < _tokenExpiry.AddSeconds(-Constants.OAuth2.TokenRefreshBufferSeconds))
                 return false;
 
-            var clientId = await _secretProvider.GetSecretAsync(_config.ClientId.SecretName, ct);
-            var clientSecret = await _secretProvider.GetSecretAsync(_config.ClientSecret.SecretName, ct);
+            var clientId = await ResolveSecretAsync(_config.ClientId, ct);
+            var clientSecret = await ResolveSecretAsync(_config.ClientSecret, ct);
 
             var tokenRequest = new HttpRequestMessage(HttpMethod.Post, _config.TokenUrl)
             {
@@ -78,6 +81,19 @@ public class OAuth2AuthHandler : IAuthHandler
         {
             _refreshLock.Release();
         }
+    }
+
+    private Task<string> ResolveSecretAsync(SecretReference secret, CancellationToken ct)
+    {
+        if (secret.IsEncrypted)
+        {
+            if (_userContext == null)
+                throw new InvalidOperationException("User context required for encrypted secrets.");
+
+            return _secretResolver.ResolveAsync(secret, _userContext.UserId, _userContext.EncryptionSalt, ct);
+        }
+
+        return _secretResolver.ResolveAsync(secret, "", "", ct);
     }
 
     private sealed class TokenResponse

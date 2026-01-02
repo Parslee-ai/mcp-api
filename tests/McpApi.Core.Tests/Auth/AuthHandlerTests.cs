@@ -11,7 +11,7 @@ using Xunit;
 /// </summary>
 public class AuthHandlerTests
 {
-    private readonly MockSecretProvider _secretProvider = new();
+    private readonly MockSecretResolver _secretResolver = new();
 
     #region ApiKeyAuthHandler Tests
 
@@ -19,14 +19,14 @@ public class AuthHandlerTests
     public async Task ApiKeyAuthHandler_WithHeaderPlacement_AddsHeader()
     {
         // Arrange
-        _secretProvider.SetSecret("api-key-secret", "test-api-key-123");
+        _secretResolver.SetSecret("api-key-secret", "test-api-key-123");
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "X-API-Key",
             In = "header",
-            Secret = new SecretReference { SecretName = "api-key-secret" }
+            Secret = SecretReference.FromKeyVault("api-key-secret")
         };
-        var handler = new ApiKeyAuthHandler(config, _secretProvider);
+        var handler = new ApiKeyAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -41,14 +41,14 @@ public class AuthHandlerTests
     public async Task ApiKeyAuthHandler_WithQueryPlacement_AddsQueryParameter()
     {
         // Arrange
-        _secretProvider.SetSecret("api-key-secret", "test-api-key-123");
+        _secretResolver.SetSecret("api-key-secret", "test-api-key-123");
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "api_key",
             In = "query",
-            Secret = new SecretReference { SecretName = "api-key-secret" }
+            Secret = SecretReference.FromKeyVault("api-key-secret")
         };
-        var handler = new ApiKeyAuthHandler(config, _secretProvider);
+        var handler = new ApiKeyAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -62,14 +62,14 @@ public class AuthHandlerTests
     public async Task ApiKeyAuthHandler_WithQueryPlacement_PreservesExistingQuery()
     {
         // Arrange
-        _secretProvider.SetSecret("api-key-secret", "my-key");
+        _secretResolver.SetSecret("api-key-secret", "my-key");
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "key",
             In = "query",
-            Secret = new SecretReference { SecretName = "api-key-secret" }
+            Secret = SecretReference.FromKeyVault("api-key-secret")
         };
-        var handler = new ApiKeyAuthHandler(config, _secretProvider);
+        var handler = new ApiKeyAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users?page=1");
 
         // Act
@@ -84,14 +84,14 @@ public class AuthHandlerTests
     public async Task ApiKeyAuthHandler_WithCookiePlacement_AddsCookieHeader()
     {
         // Arrange
-        _secretProvider.SetSecret("session-secret", "session-token-abc");
+        _secretResolver.SetSecret("session-secret", "session-token-abc");
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "session_id",
             In = "cookie",
-            Secret = new SecretReference { SecretName = "session-secret" }
+            Secret = SecretReference.FromKeyVault("session-secret")
         };
-        var handler = new ApiKeyAuthHandler(config, _secretProvider);
+        var handler = new ApiKeyAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -106,14 +106,14 @@ public class AuthHandlerTests
     public async Task ApiKeyAuthHandler_WithUnknownPlacement_ThrowsInvalidOperationException()
     {
         // Arrange
-        _secretProvider.SetSecret("api-key-secret", "test-key");
+        _secretResolver.SetSecret("api-key-secret", "test-key");
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "key",
             In = "unknown",
-            Secret = new SecretReference { SecretName = "api-key-secret" }
+            Secret = SecretReference.FromKeyVault("api-key-secret")
         };
-        var handler = new ApiKeyAuthHandler(config, _secretProvider);
+        var handler = new ApiKeyAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act & Assert
@@ -128,13 +128,13 @@ public class AuthHandlerTests
     public async Task BearerTokenAuthHandler_AddsAuthorizationHeader()
     {
         // Arrange
-        _secretProvider.SetSecret("bearer-token", "jwt-token-xyz");
+        _secretResolver.SetSecret("bearer-token", "jwt-token-xyz");
         var config = new BearerTokenAuthConfig
         {
             Prefix = "Bearer",
-            Secret = new SecretReference { SecretName = "bearer-token" }
+            Secret = SecretReference.FromKeyVault("bearer-token")
         };
-        var handler = new BearerTokenAuthHandler(config, _secretProvider);
+        var handler = new BearerTokenAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -150,13 +150,13 @@ public class AuthHandlerTests
     public async Task BearerTokenAuthHandler_WithCustomPrefix_UsesCustomPrefix()
     {
         // Arrange
-        _secretProvider.SetSecret("token", "my-token");
+        _secretResolver.SetSecret("token", "my-token");
         var config = new BearerTokenAuthConfig
         {
             Prefix = "Token",
-            Secret = new SecretReference { SecretName = "token" }
+            Secret = SecretReference.FromKeyVault("token")
         };
-        var handler = new BearerTokenAuthHandler(config, _secretProvider);
+        var handler = new BearerTokenAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -175,14 +175,14 @@ public class AuthHandlerTests
     public async Task BasicAuthHandler_AddsBasicAuthHeader()
     {
         // Arrange
-        _secretProvider.SetSecret("username", "testuser");
-        _secretProvider.SetSecret("password", "testpass");
+        _secretResolver.SetSecret("username", "testuser");
+        _secretResolver.SetSecret("password", "testpass");
         var config = new BasicAuthConfig
         {
-            Username = new SecretReference { SecretName = "username" },
-            Password = new SecretReference { SecretName = "password" }
+            Username = SecretReference.FromKeyVault("username"),
+            Password = SecretReference.FromKeyVault("password")
         };
-        var handler = new BasicAuthHandler(config, _secretProvider);
+        var handler = new BasicAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -200,14 +200,14 @@ public class AuthHandlerTests
     public async Task BasicAuthHandler_EncodesSpecialCharacters()
     {
         // Arrange
-        _secretProvider.SetSecret("username", "user@example.com");
-        _secretProvider.SetSecret("password", "p@ss:word!");
+        _secretResolver.SetSecret("username", "user@example.com");
+        _secretResolver.SetSecret("password", "p@ss:word!");
         var config = new BasicAuthConfig
         {
-            Username = new SecretReference { SecretName = "username" },
-            Password = new SecretReference { SecretName = "password" }
+            Username = SecretReference.FromKeyVault("username"),
+            Password = SecretReference.FromKeyVault("password")
         };
-        var handler = new BasicAuthHandler(config, _secretProvider);
+        var handler = new BasicAuthHandler(config, _secretResolver, null);
         var request = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com/users");
 
         // Act
@@ -246,7 +246,7 @@ public class AuthHandlerTests
     public void AuthHandlerFactory_WithNoAuthConfig_ReturnsNoOpHandler()
     {
         // Arrange
-        var factory = new AuthHandlerFactory(_secretProvider, new MockHttpClientFactory());
+        var factory = new AuthHandlerFactory(_secretResolver, new MockHttpClientFactory());
         var config = new NoAuthConfig();
 
         // Act
@@ -260,12 +260,12 @@ public class AuthHandlerTests
     public void AuthHandlerFactory_WithApiKeyConfig_ReturnsApiKeyHandler()
     {
         // Arrange
-        var factory = new AuthHandlerFactory(_secretProvider, new MockHttpClientFactory());
+        var factory = new AuthHandlerFactory(_secretResolver, new MockHttpClientFactory());
         var config = new ApiKeyAuthConfig
         {
             ParameterName = "X-API-Key",
             In = "header",
-            Secret = new SecretReference { SecretName = "key" }
+            Secret = SecretReference.FromKeyVault("key")
         };
 
         // Act
@@ -279,11 +279,11 @@ public class AuthHandlerTests
     public void AuthHandlerFactory_WithBearerConfig_ReturnsBearerHandler()
     {
         // Arrange
-        var factory = new AuthHandlerFactory(_secretProvider, new MockHttpClientFactory());
+        var factory = new AuthHandlerFactory(_secretResolver, new MockHttpClientFactory());
         var config = new BearerTokenAuthConfig
         {
             Prefix = "Bearer",
-            Secret = new SecretReference { SecretName = "token" }
+            Secret = SecretReference.FromKeyVault("token")
         };
 
         // Act
@@ -297,11 +297,11 @@ public class AuthHandlerTests
     public void AuthHandlerFactory_WithBasicConfig_ReturnsBasicHandler()
     {
         // Arrange
-        var factory = new AuthHandlerFactory(_secretProvider, new MockHttpClientFactory());
+        var factory = new AuthHandlerFactory(_secretResolver, new MockHttpClientFactory());
         var config = new BasicAuthConfig
         {
-            Username = new SecretReference { SecretName = "user" },
-            Password = new SecretReference { SecretName = "pass" }
+            Username = SecretReference.FromKeyVault("user"),
+            Password = SecretReference.FromKeyVault("pass")
         };
 
         // Act
@@ -315,13 +315,13 @@ public class AuthHandlerTests
     public void AuthHandlerFactory_CachesOAuth2Handlers()
     {
         // Arrange
-        var factory = new AuthHandlerFactory(_secretProvider, new MockHttpClientFactory());
+        var factory = new AuthHandlerFactory(_secretResolver, new MockHttpClientFactory());
         var config = new OAuth2AuthConfig
         {
             Flow = "clientCredentials",
             TokenUrl = "https://auth.example.com/token",
-            ClientId = new SecretReference { SecretName = "client-id" },
-            ClientSecret = new SecretReference { SecretName = "client-secret" }
+            ClientId = SecretReference.FromKeyVault("client-id"),
+            ClientSecret = SecretReference.FromKeyVault("client-secret")
         };
 
         // Act
@@ -336,35 +336,25 @@ public class AuthHandlerTests
 
     #region Mock Implementations
 
-    private class MockSecretProvider : ISecretProvider
+    private class MockSecretResolver : ISecretResolver
     {
         private readonly Dictionary<string, string> _secrets = new();
 
         public void SetSecret(string name, string value) => _secrets[name] = value;
 
-        public Task<string> GetSecretAsync(string secretName, CancellationToken ct = default)
+        public Task<string> ResolveAsync(SecretReference reference, string userId, string userSalt, CancellationToken ct = default)
         {
-            if (_secrets.TryGetValue(secretName, out var value))
+            // For Key Vault references, use SecretName
+            if (reference.IsKeyVaultReference && _secrets.TryGetValue(reference.SecretName!, out var value))
                 return Task.FromResult(value);
-            throw new KeyNotFoundException($"Secret '{secretName}' not found");
+
+            throw new KeyNotFoundException($"Secret not found");
         }
 
-        public Task<string?> TryGetSecretAsync(string secretName, CancellationToken ct = default)
+        public SecretReference Encrypt(string plaintext, string userId, string userSalt)
         {
-            _secrets.TryGetValue(secretName, out var value);
-            return Task.FromResult(value);
-        }
-
-        public Task SetSecretAsync(string secretName, string value, CancellationToken ct = default)
-        {
-            _secrets[secretName] = value;
-            return Task.CompletedTask;
-        }
-
-        public Task DeleteSecretAsync(string secretName, CancellationToken ct = default)
-        {
-            _secrets.Remove(secretName);
-            return Task.CompletedTask;
+            // Not needed for these tests
+            throw new NotImplementedException();
         }
     }
 

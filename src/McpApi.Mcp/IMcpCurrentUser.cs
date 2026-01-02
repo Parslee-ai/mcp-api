@@ -1,5 +1,7 @@
 namespace McpApi.Mcp;
 
+using McpApi.Core.Secrets;
+
 /// <summary>
 /// Service for accessing the current MCP user context.
 /// Phase 6 will implement token-based authentication.
@@ -11,15 +13,22 @@ public interface IMcpCurrentUser
     /// Throws if not authenticated.
     /// </summary>
     string UserId { get; }
+
+    /// <summary>
+    /// Gets the user's secret context for decrypting API secrets.
+    /// May be null if encryption is not configured.
+    /// </summary>
+    UserSecretContext? SecretContext { get; }
 }
 
 /// <summary>
-/// Simple implementation that reads user ID from environment variable.
+/// Simple implementation that reads user ID and encryption salt from environment variables.
 /// Will be replaced with token-based auth in Phase 6.
 /// </summary>
 public class EnvironmentMcpCurrentUser : IMcpCurrentUser
 {
     private readonly string _userId;
+    private readonly UserSecretContext? _secretContext;
 
     public EnvironmentMcpCurrentUser()
     {
@@ -27,7 +36,14 @@ public class EnvironmentMcpCurrentUser : IMcpCurrentUser
             ?? throw new InvalidOperationException(
                 "MCPAPI_USER_ID environment variable is required. " +
                 "In Phase 6, this will be replaced with token-based authentication.");
+
+        var encryptionSalt = Environment.GetEnvironmentVariable("MCPAPI_ENCRYPTION_SALT");
+        if (!string.IsNullOrEmpty(encryptionSalt))
+        {
+            _secretContext = new UserSecretContext(_userId, encryptionSalt);
+        }
     }
 
     public string UserId => _userId;
+    public UserSecretContext? SecretContext => _secretContext;
 }
