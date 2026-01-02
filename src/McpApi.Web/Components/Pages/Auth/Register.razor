@@ -1,0 +1,118 @@
+@page "/auth/register"
+@using McpApi.Core.Auth
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Register - MCP-API</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card mt-5">
+            <div class="card-header">
+                <h4 class="mb-0">Create Account</h4>
+            </div>
+            <div class="card-body">
+                @if (_registrationComplete)
+                {
+                    <div class="alert alert-success">
+                        <h5>Registration Successful!</h5>
+                        <p>We've sent a verification email to <strong>@_model.Email</strong>.</p>
+                        <p>Please check your inbox and click the verification link to activate your account.</p>
+                    </div>
+                    <a href="/auth/login" class="btn btn-primary w-100">Go to Login</a>
+                }
+                else
+                {
+                    @if (!string.IsNullOrEmpty(_errorMessage))
+                    {
+                        <div class="alert alert-danger">@_errorMessage</div>
+                    }
+
+                    <EditForm Model="_model" OnValidSubmit="HandleRegister">
+                        <DataAnnotationsValidator />
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <InputText id="email" class="form-control" @bind-Value="_model.Email" />
+                            <ValidationMessage For="() => _model.Email" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <InputText id="password" type="password" class="form-control" @bind-Value="_model.Password" />
+                            <ValidationMessage For="() => _model.Password" />
+                            <small class="text-muted">Minimum 8 characters</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="confirmPassword" class="form-label">Confirm Password</label>
+                            <InputText id="confirmPassword" type="password" class="form-control" @bind-Value="_model.ConfirmPassword" />
+                            <ValidationMessage For="() => _model.ConfirmPassword" />
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100" disabled="@_isLoading">
+                            @if (_isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                            }
+                            Create Account
+                        </button>
+                    </EditForm>
+
+                    <hr />
+
+                    <p class="text-center mb-0">
+                        Already have an account? <a href="/auth/login">Login</a>
+                    </p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private RegisterModel _model = new();
+    private string? _errorMessage;
+    private bool _isLoading;
+    private bool _registrationComplete;
+
+    private async Task HandleRegister()
+    {
+        _errorMessage = null;
+        _isLoading = true;
+
+        try
+        {
+            if (_model.Password != _model.ConfirmPassword)
+            {
+                _errorMessage = "Passwords do not match.";
+                return;
+            }
+
+            var result = await AuthService.RegisterAsync(_model.Email, _model.Password);
+            if (result.Success)
+            {
+                _registrationComplete = true;
+            }
+            else
+            {
+                _errorMessage = result.ErrorMessage ?? "Registration failed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private class RegisterModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string ConfirmPassword { get; set; } = "";
+    }
+}

@@ -28,6 +28,12 @@ public static class Constants
         /// <summary>Container for API endpoints (stored separately for large specs).</summary>
         public const string ApiEndpoints = "api-endpoints";
 
+        /// <summary>Container for user accounts.</summary>
+        public const string Users = "users";
+
+        /// <summary>Container for usage tracking.</summary>
+        public const string Usage = "usage";
+
         /// <summary>Max concurrent Cosmos operations for batch upserts.</summary>
         public const int BatchConcurrency = 10;
     }

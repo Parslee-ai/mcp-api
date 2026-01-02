@@ -1,0 +1,80 @@
+@page "/auth/verify-email"
+@using McpApi.Core.Auth
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Verify Email - MCP-API</PageTitle>
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+        <div class="card mt-5">
+            <div class="card-header">
+                <h4 class="mb-0">Email Verification</h4>
+            </div>
+            <div class="card-body">
+                @if (_isLoading)
+                {
+                    <div class="text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Verifying...</span>
+                        </div>
+                        <p class="mt-2">Verifying your email...</p>
+                    </div>
+                }
+                else if (_success)
+                {
+                    <div class="alert alert-success">
+                        <h5>Email Verified!</h5>
+                        <p>Your email has been successfully verified. You can now log in to your account.</p>
+                    </div>
+                    <a href="/auth/login" class="btn btn-primary w-100">Go to Login</a>
+                }
+                else
+                {
+                    <div class="alert alert-danger">
+                        <h5>Verification Failed</h5>
+                        <p>@_errorMessage</p>
+                    </div>
+                    <a href="/auth/login" class="btn btn-secondary w-100">Go to Login</a>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? Token { get; set; }
+
+    private bool _isLoading = true;
+    private bool _success;
+    private string? _errorMessage;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !string.IsNullOrEmpty(Token))
+        {
+            await VerifyToken();
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerifyToken()
+    {
+        try
+        {
+            var result = await AuthService.VerifyEmailAsync(Token!);
+            _success = result.Success;
+            _errorMessage = result.ErrorMessage;
+        }
+        catch (Exception ex)
+        {
+            _success = false;
+            _errorMessage = $"An error occurred: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
