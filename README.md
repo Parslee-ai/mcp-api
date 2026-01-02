@@ -1,7 +1,7 @@
-# AnyAPI
+# MCP-API
 
-[![CI](https://github.com/Parslee-ai/anyapi/actions/workflows/ci.yml/badge.svg)](https://github.com/Parslee-ai/anyapi/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/Parslee-ai/anyapi/graph/badge.svg)](https://codecov.io/gh/Parslee-ai/anyapi)
+[![CI](https://github.com/Parslee-ai/mcp-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Parslee-ai/mcp-api/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Parslee-ai/mcp-api/graph/badge.svg)](https://codecov.io/gh/Parslee-ai/mcp-api)
 
 A dynamic MCP (Model Context Protocol) server that exposes REST APIs as MCP tools. Register any API with an OpenAPI specification and let AI agents call it through a unified interface.
 
@@ -25,16 +25,16 @@ A dynamic MCP (Model Context Protocol) server that exposes REST APIs as MCP tool
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/Parslee-ai/anyapi.git
-   cd anyapi
+   git clone https://github.com/Parslee-ai/mcp-api.git
+   cd mcp-api
    ```
 
-2. Configure settings in `src/AnyAPI.Web/appsettings.json`:
+2. Configure settings in `src/McpApi.Web/appsettings.json`:
    ```json
    {
      "Cosmos": {
        "ConnectionString": "your-cosmos-connection-string",
-       "DatabaseName": "AnyApiDb"
+       "DatabaseName": "mcpapi"
      },
      "KeyVault": {
        "VaultUri": "https://your-keyvault.vault.azure.net/"
@@ -44,7 +44,7 @@ A dynamic MCP (Model Context Protocol) server that exposes REST APIs as MCP tool
 
 3. Run the web application:
    ```bash
-   dotnet run --project src/AnyAPI.Web
+   dotnet run --project src/McpApi.Web
    ```
 
 4. Open https://localhost:5001 to access the management UI
@@ -52,7 +52,7 @@ A dynamic MCP (Model Context Protocol) server that exposes REST APIs as MCP tool
 ### Running the MCP Server
 
 ```bash
-dotnet run --project src/AnyAPI.Mcp
+dotnet run --project src/McpApi.Mcp
 ```
 
 Configure your MCP client to connect to the server's stdio interface.
@@ -61,7 +61,7 @@ Configure your MCP client to connect to the server's stdio interface.
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   AnyAPI.Web    │     │   AnyAPI.Mcp    │     │  AnyAPI.Core    │
+│   McpApi.Web    │     │   McpApi.Mcp    │     │  McpApi.Core    │
 │  (Blazor UI)    │     │  (MCP Server)   │     │   (Shared)      │
 │                 │     │                 │     │                 │
 │ • Register APIs │     │ • Tool Provider │     │ • OpenAPI Parse │
@@ -80,9 +80,9 @@ Configure your MCP client to connect to the server's stdio interface.
 
 ### Project Structure
 
-- **AnyAPI.Core** - Domain models, OpenAPI parsing, storage interfaces, auth handlers
-- **AnyAPI.Web** - Blazor Server UI for API management
-- **AnyAPI.Mcp** - MCP server exposing registered APIs as tools
+- **McpApi.Core** - Domain models, OpenAPI parsing, storage interfaces, auth handlers
+- **McpApi.Web** - Blazor Server UI for API management
+- **McpApi.Mcp** - MCP server exposing registered APIs as tools
 
 ## Supported API Formats
 
@@ -95,7 +95,7 @@ Configure your MCP client to connect to the server's stdio interface.
 
 ## Authentication
 
-AnyAPI supports multiple authentication methods:
+MCP-API supports multiple authentication methods:
 
 - **No Auth** - Public APIs
 - **API Key** - Header, query, or cookie-based
@@ -110,10 +110,10 @@ Secrets are stored securely in Azure Key Vault and referenced by name.
 ### Docker
 
 ```bash
-docker build -t anyapi-web .
+docker build -t mcpapi-web .
 docker run -p 8080:8080 \
   -e Cosmos__ConnectionString="your-connection-string" \
-  anyapi-web
+  mcpapi-web
 ```
 
 ### Azure Container Apps
@@ -121,11 +121,11 @@ docker run -p 8080:8080 \
 ```bash
 # Build and push to ACR
 az acr build --registry <registry> --resource-group <rg> \
-  --image anyapi-web:v1 --file Dockerfile .
+  --image mcpapi-web:v1 --file Dockerfile .
 
 # Deploy to Container Apps
-az containerapp create --name anyapi-web --resource-group <rg> \
-  --image <registry>.azurecr.io/anyapi-web:v1 \
+az containerapp create --name mcpapi-web --resource-group <rg> \
+  --image <registry>.azurecr.io/mcpapi-web:v1 \
   --environment <env-name> \
   --ingress external --target-port 8080
 ```

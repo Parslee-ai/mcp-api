@@ -1,6 +1,6 @@
-# Contributing to AnyAPI
+# Contributing to MCP-API
 
-Thank you for your interest in contributing to AnyAPI! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to MCP-API! This document provides guidelines and information for contributors.
 
 ## Getting Started
 

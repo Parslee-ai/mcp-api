@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve AnyAPI
+about: Report a bug to help us improve MCP-API
 title: '[Bug] '
 labels: bug
 assignees: ''
@@ -28,7 +28,7 @@ What actually happened.
 
 - **OS**: [e.g., Windows 11, macOS 14, Ubuntu 22.04]
 - **Runtime**: [e.g., .NET 9.0]
-- **AnyAPI Version**: [e.g., v1.0.0]
+- **MCP-API Version**: [e.g., v1.0.0]
 - **Deployment**: [e.g., Local, Azure Container Apps]
 
 ## API Spec Details (if applicable)

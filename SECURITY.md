@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in AnyAPI, please report it responsibly:
+If you discover a security vulnerability in MCP-API, please report it responsibly:
 
 1. **Do not** open a public GitHub issue for security vulnerabilities
 2. Email the maintainers directly with details of the vulnerability
@@ -19,7 +19,7 @@ If you discover a security vulnerability in AnyAPI, please report it responsibly
 
 ## Security Best Practices for Users
 
-When deploying AnyAPI:
+When deploying MCP-API:
 
 ### Secrets Management
 
