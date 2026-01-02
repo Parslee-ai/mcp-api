@@ -82,8 +82,47 @@ builder.Services.AddSingleton<IUsageTrackingService>(sp =>
     return new UsageTrackingService(usageStore, apiStore);
 });
 
-// User context for multi-tenancy (Phase 6 will add token auth)
-builder.Services.AddSingleton<IMcpCurrentUser, EnvironmentMcpCurrentUser>();
+// Configure user store for token validation
+builder.Services.AddSingleton<IUserStore>(sp =>
+{
+    var cosmosClient = sp.GetRequiredService<CosmosClient>();
+    return new CosmosUserStore(cosmosClient, databaseName);
+});
+
+// Configure MCP token service
+builder.Services.AddSingleton<IMcpTokenStore>(sp =>
+{
+    var cosmosClient = sp.GetRequiredService<CosmosClient>();
+    return new CosmosMcpTokenStore(cosmosClient, databaseName);
+});
+
+builder.Services.AddSingleton<IMcpTokenService>(sp =>
+{
+    var tokenStore = sp.GetRequiredService<IMcpTokenStore>();
+    return new McpTokenService(tokenStore);
+});
+
+// User context for multi-tenancy with token-based authentication
+// Uses MCPAPI_TOKEN if set, otherwise falls back to MCPAPI_USER_ID for development
+builder.Services.AddSingleton<IMcpCurrentUser>(sp =>
+{
+    var token = Environment.GetEnvironmentVariable("MCPAPI_TOKEN");
+    if (!string.IsNullOrEmpty(token))
+    {
+        // Production: Use token-based authentication
+        var tokenService = sp.GetRequiredService<IMcpTokenService>();
+        var userStore = sp.GetRequiredService<IUserStore>();
+        return new TokenMcpCurrentUser(tokenService, userStore);
+    }
+    else
+    {
+        // Development fallback: Use environment variables
+        #pragma warning disable CS0618 // Obsolete warning suppressed for development mode
+        return new EnvironmentMcpCurrentUser();
+        #pragma warning restore CS0618
+    }
+});
+
 builder.Services.AddScoped<DynamicToolProvider>();
 
 // Configure MCP Server

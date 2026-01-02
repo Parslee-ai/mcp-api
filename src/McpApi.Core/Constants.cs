@@ -34,6 +34,9 @@ public static class Constants
         /// <summary>Container for usage tracking.</summary>
         public const string Usage = "usage";
 
+        /// <summary>Container for MCP API tokens.</summary>
+        public const string Tokens = "tokens";
+
         /// <summary>Max concurrent Cosmos operations for batch upserts.</summary>
         public const int BatchConcurrency = 10;
     }

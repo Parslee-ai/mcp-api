@@ -121,6 +121,19 @@ builder.Services.AddSingleton<IUsageTrackingService>(sp =>
     return new UsageTrackingService(usageStore, apiStore);
 });
 
+// Configure MCP token service
+builder.Services.AddSingleton<IMcpTokenStore>(sp =>
+{
+    var cosmosClient = sp.GetRequiredService<CosmosClient>();
+    return new CosmosMcpTokenStore(cosmosClient, databaseName);
+});
+
+builder.Services.AddSingleton<IMcpTokenService>(sp =>
+{
+    var tokenStore = sp.GetRequiredService<IMcpTokenStore>();
+    return new McpTokenService(tokenStore);
+});
+
 // Configure notification services
 var acsConnectionString = builder.Configuration["ACS:ConnectionString"];
 var acsEmailSender = builder.Configuration["ACS:EmailSender"] ?? "noreply@mcp-api.ai";
