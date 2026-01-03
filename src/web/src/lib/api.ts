@@ -96,13 +96,7 @@ export const authApi = {
   // Get available OAuth providers
   getProviders: () => api.get<{ providers: string[] }>('/auth/providers'),
 
-  // Get OAuth login URL for redirecting
-  getGoogleLoginUrl: (returnUrl?: string) => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
-    const params = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';
-    return `${baseUrl}/auth/login/google${params}`;
-  },
-
+  // Get GitHub OAuth login URL for redirecting
   getGitHubLoginUrl: (returnUrl?: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
     const params = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';

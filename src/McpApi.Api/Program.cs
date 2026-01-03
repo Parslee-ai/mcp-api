@@ -140,8 +140,6 @@ builder.Services.Configure<JwtOptions>(options =>
 });
 
 // Configure OAuth providers
-var googleClientId = builder.Configuration["Google:ClientId"];
-var googleClientSecret = builder.Configuration["Google:ClientSecret"];
 var githubClientId = builder.Configuration["GitHub:ClientId"];
 var githubClientSecret = builder.Configuration["GitHub:ClientSecret"];
 
@@ -171,24 +169,6 @@ var authBuilder = builder.Services.AddAuthentication(options =>
     options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
     options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
 });
-
-// Add Google OAuth if configured
-if (!string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret))
-{
-    authBuilder.AddGoogle("Google", options =>
-    {
-        options.ClientId = googleClientId;
-        options.ClientSecret = googleClientSecret;
-        options.SignInScheme = "OAuthTemp";
-        options.CallbackPath = "/api/auth/callback/google";
-        options.SaveTokens = false;
-    });
-    Console.WriteLine("[INFO] Google OAuth configured");
-}
-else
-{
-    Console.WriteLine("[WARNING] Google OAuth not configured (Google:ClientId and Google:ClientSecret required)");
-}
 
 // Add GitHub OAuth if configured
 if (!string.IsNullOrEmpty(githubClientId) && !string.IsNullOrEmpty(githubClientSecret))

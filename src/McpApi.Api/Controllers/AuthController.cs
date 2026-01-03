@@ -47,30 +47,6 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
-    /// Initiates Google OAuth login flow.
-    /// </summary>
-    [HttpGet("login/google")]
-    public IActionResult LoginGoogle([FromQuery] string? returnUrl)
-    {
-        var redirectUrl = GetOAuthRedirectUrl(returnUrl);
-        var properties = new AuthenticationProperties
-        {
-            RedirectUri = $"/api/auth/callback/google/complete?returnUrl={Uri.EscapeDataString(redirectUrl)}",
-            Items = { { "returnUrl", redirectUrl } }
-        };
-        return Challenge(properties, "Google");
-    }
-
-    /// <summary>
-    /// Handles Google OAuth callback after authentication.
-    /// </summary>
-    [HttpGet("callback/google/complete")]
-    public async Task<IActionResult> GoogleCallback([FromQuery] string? returnUrl, CancellationToken ct)
-    {
-        return await HandleOAuthCallback("google", returnUrl, ct);
-    }
-
-    /// <summary>
     /// Initiates GitHub OAuth login flow.
     /// </summary>
     [HttpGet("login/github")]
@@ -109,8 +85,7 @@ public class AuthController : ControllerBase
         var providerId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
         var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
         var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
-        var avatarUrl = claims.FirstOrDefault(c => c.Type == "urn:google:picture")?.Value
-            ?? claims.FirstOrDefault(c => c.Type == "urn:github:avatar")?.Value;
+        var avatarUrl = claims.FirstOrDefault(c => c.Type == "urn:github:avatar")?.Value;
 
         if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(email))
         {
@@ -282,11 +257,6 @@ public class AuthController : ControllerBase
     public IActionResult GetProviders()
     {
         var providers = new List<string>();
-
-        if (!string.IsNullOrEmpty(_configuration["Google:ClientId"]))
-        {
-            providers.Add("google");
-        }
 
         if (!string.IsNullOrEmpty(_configuration["GitHub:ClientId"]))
         {

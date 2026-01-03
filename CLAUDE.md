@@ -109,10 +109,8 @@ src/web/
 ### API Endpoints (McpApi.Api)
 
 ```
-Auth (OAuth):
-  GET    /api/auth/login/google   # Initiate Google OAuth
+Auth (GitHub OAuth):
   GET    /api/auth/login/github   # Initiate GitHub OAuth
-  GET    /api/auth/callback/google/complete # Google OAuth callback
   GET    /api/auth/callback/github/complete # GitHub OAuth callback
   POST   /api/auth/refresh        # Refresh access token
   POST   /api/auth/logout         # Invalidate refresh token
@@ -158,8 +156,8 @@ When saving: `UpsertAsync` clears endpoints from registration, `SaveEndpointsAsy
 
 ### OAuth Authentication
 
-The API uses OAuth 2.0 (Google and GitHub) with JWT for session management:
-- Users authenticate via OAuth providers (no email/password)
+The API uses GitHub OAuth with JWT for session management:
+- Users authenticate via GitHub OAuth (no email/password)
 - After OAuth callback, API issues JWT access token + refresh token cookie
 - **Access Token** - 15 min, stored in memory on frontend
 - **Refresh Token** - 7 days, stored in httpOnly cookie
@@ -180,17 +178,13 @@ Cosmos DB requires `CosmosSystemTextJsonSerializer` to use System.Text.Json inst
 - `Cosmos:ConnectionString` or `cosmos-connection-string` (Key Vault secret)
 - `Jwt:Secret` or `jwt-signing-key` (Key Vault secret) - at least 32 characters
 
-**API - OAuth (at least one provider required):**
-- `Google:ClientId` - Google OAuth client ID
-- `Google:ClientSecret` - Google OAuth client secret
+**API - GitHub OAuth (required):**
 - `GitHub:ClientId` - GitHub OAuth client ID
 - `GitHub:ClientSecret` - GitHub OAuth client secret
 
-To set up OAuth:
-1. **Google**: Create credentials at https://console.cloud.google.com/apis/credentials
-   - Add authorized redirect URI: `https://your-api-domain/api/auth/callback/google`
-2. **GitHub**: Create OAuth App at https://github.com/settings/developers
-   - Add callback URL: `https://your-api-domain/api/auth/callback/github`
+To set up GitHub OAuth:
+1. Create OAuth App at https://github.com/settings/developers
+2. Add callback URL: `https://your-api-domain/api/auth/callback/github`
 
 **API - Optional:**
 - `Cosmos:DatabaseName` (default: "mcpapi")
