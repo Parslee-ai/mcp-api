@@ -222,6 +222,21 @@ builder.Services.AddHttpClient<OpenApiParser>();
 builder.Services.AddHttpClient<OpenApiDiscovery>();
 builder.Services.AddHttpClient<PostmanCollectionParser>();
 builder.Services.AddHttpClient<GraphQLSchemaParser>();
+builder.Services.AddHttpClient<GitHubDemoService>();
+
+// Configure demo services
+var anthropicApiKey = builder.Configuration["Anthropic:ApiKey"]
+    ?? builder.Configuration["anthropic-api-key"];
+
+if (!string.IsNullOrEmpty(anthropicApiKey))
+{
+    builder.Services.AddScoped<IGitHubDemoService, GitHubDemoService>();
+}
+else
+{
+    Console.WriteLine("[WARNING] Anthropic API key not configured. Demo endpoint will be disabled.");
+    builder.Services.AddScoped<IGitHubDemoService>(_ => null!);
+}
 
 // Register parsers
 builder.Services.AddTransient<IOpenApiParser>(sp => sp.GetRequiredService<OpenApiParser>());
