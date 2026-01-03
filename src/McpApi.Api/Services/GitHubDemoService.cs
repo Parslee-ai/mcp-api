@@ -160,7 +160,7 @@ public class GitHubDemoService : IGitHubDemoService
 
 public class GitHubIssue
 {
-    public int Id { get; set; }
+    public long Id { get; set; }
     public int Number { get; set; }
     public string Title { get; set; } = "";
     public string? Body { get; set; }
@@ -180,7 +180,7 @@ public class GitHubUser
 
 public class GitHubComment
 {
-    public int Id { get; set; }
+    public long Id { get; set; }
     public string Body { get; set; } = "";
     public string HtmlUrl { get; set; } = "";
     public GitHubUser? User { get; set; }
