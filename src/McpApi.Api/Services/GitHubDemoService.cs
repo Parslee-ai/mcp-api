@@ -167,9 +167,16 @@ public class GitHubIssue
     public string State { get; set; } = "";
     public string HtmlUrl { get; set; } = "";
     public GitHubUser? User { get; set; }
-    public string[] Labels { get; set; } = [];
+    public GitHubLabel[] Labels { get; set; } = [];
     public DateTime CreatedAt { get; set; }
     public DateTime? ClosedAt { get; set; }
+}
+
+public class GitHubLabel
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public string? Color { get; set; }
 }
 
 public class GitHubUser
