@@ -18,6 +18,11 @@ public interface IUserStore
     Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets a user by their OAuth provider and provider-specific ID.
+    /// </summary>
+    Task<User?> GetByOAuthProviderAsync(string provider, string providerId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets a user by their email verification token.
     /// </summary>
     Task<User?> GetByEmailVerificationTokenAsync(string token, CancellationToken cancellationToken = default);

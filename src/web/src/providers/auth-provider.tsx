@@ -1,13 +1,13 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { User, authApi, setAccessToken } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  setUserFromToken: (token: string) => void;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -18,7 +18,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const response = await authApi.refresh();
       setAccessToken(response.data.accessToken);
@@ -27,18 +27,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setAccessToken(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Try to restore session on mount
     refreshUser().finally(() => setIsLoading(false));
-  }, []);
+  }, [refreshUser]);
 
-  const login = async (email: string, password: string) => {
-    const response = await authApi.login(email, password);
-    setAccessToken(response.data.accessToken);
-    setUser(response.data.user);
-  };
+  // Set user from OAuth callback token
+  const setUserFromToken = useCallback((token: string) => {
+    setAccessToken(token);
+    // Fetch user data from API
+    authApi.getMe().then(response => {
+      setUser(response.data);
+    }).catch(() => {
+      setUser(null);
+      setAccessToken(null);
+    });
+  }, []);
 
   const logout = async () => {
     try {
@@ -55,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
-        login,
+        setUserFromToken,
         logout,
         refreshUser,
       }}

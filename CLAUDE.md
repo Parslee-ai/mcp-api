@@ -109,15 +109,15 @@ src/web/
 ### API Endpoints (McpApi.Api)
 
 ```
-Auth:
-  POST   /api/auth/register       # Create account
-  POST   /api/auth/login          # Get JWT (access + refresh cookie)
+Auth (OAuth):
+  GET    /api/auth/login/google   # Initiate Google OAuth
+  GET    /api/auth/login/github   # Initiate GitHub OAuth
+  GET    /api/auth/callback/google/complete # Google OAuth callback
+  GET    /api/auth/callback/github/complete # GitHub OAuth callback
   POST   /api/auth/refresh        # Refresh access token
   POST   /api/auth/logout         # Invalidate refresh token
-  GET    /api/auth/verify-email   # Verify email
-  POST   /api/auth/phone          # Set phone number
-  POST   /api/auth/verify-phone   # Verify SMS code
   GET    /api/auth/me             # Current user
+  GET    /api/auth/providers      # List available OAuth providers
 
 APIs:
   GET    /api/apis                # List registered APIs
@@ -156,12 +156,15 @@ Large APIs exceed Cosmos DB's 2MB document limit. The solution uses two containe
 
 When saving: `UpsertAsync` clears endpoints from registration, `SaveEndpointsAsync` batch-upserts endpoints separately.
 
-### JWT Authentication
+### OAuth Authentication
 
-The API uses JWT with access and refresh tokens:
+The API uses OAuth 2.0 (Google and GitHub) with JWT for session management:
+- Users authenticate via OAuth providers (no email/password)
+- After OAuth callback, API issues JWT access token + refresh token cookie
 - **Access Token** - 15 min, stored in memory on frontend
 - **Refresh Token** - 7 days, stored in httpOnly cookie
 - Auto-refresh on 401 via axios interceptor in `src/web/src/lib/api.ts`
+- New users are automatically created on first OAuth login
 
 ### Polymorphic Auth Configuration
 
@@ -173,12 +176,27 @@ Cosmos DB requires `CosmosSystemTextJsonSerializer` to use System.Text.Json inst
 
 ### Configuration
 
-**API (McpApi.Api):**
+**API (McpApi.Api) - Required:**
 - `Cosmos:ConnectionString` or `cosmos-connection-string` (Key Vault secret)
+- `Jwt:Secret` or `jwt-signing-key` (Key Vault secret) - at least 32 characters
+
+**API - OAuth (at least one provider required):**
+- `Google:ClientId` - Google OAuth client ID
+- `Google:ClientSecret` - Google OAuth client secret
+- `GitHub:ClientId` - GitHub OAuth client ID
+- `GitHub:ClientSecret` - GitHub OAuth client secret
+
+To set up OAuth:
+1. **Google**: Create credentials at https://console.cloud.google.com/apis/credentials
+   - Add authorized redirect URI: `https://your-api-domain/api/auth/callback/google`
+2. **GitHub**: Create OAuth App at https://github.com/settings/developers
+   - Add callback URL: `https://your-api-domain/api/auth/callback/github`
+
+**API - Optional:**
 - `Cosmos:DatabaseName` (default: "mcpapi")
 - `KeyVault:VaultUri` (optional, for secret references)
-- `Jwt:Secret` or `jwt-signing-key` (Key Vault secret)
 - `Cors:AllowedOrigins` (array of allowed frontend origins)
+- `App:FrontendUrl` (default: "http://localhost:3000") - for OAuth redirect
 
 **Frontend (src/web):**
 - `NEXT_PUBLIC_API_URL` - API base URL (e.g., `http://localhost:5001/api`)

@@ -39,4 +39,9 @@ public interface IUsageStore
     /// Creates or updates a usage record.
     /// </summary>
     Task<UsageRecord> UpsertAsync(UsageRecord record, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes all usage records for a user (GDPR account deletion).
+    /// </summary>
+    Task DeleteAllForUserAsync(string userId, CancellationToken ct = default);
 }

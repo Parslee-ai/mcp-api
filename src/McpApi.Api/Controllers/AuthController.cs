@@ -3,6 +3,8 @@ using McpApi.Api.Auth;
 using McpApi.Api.DTOs;
 using McpApi.Core.Auth;
 using McpApi.Core.Models;
+using McpApi.Core.Storage;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,42 +16,131 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IConfiguration _configuration;
+    private readonly IApiRegistrationStore _apiStore;
+    private readonly IMcpTokenStore _mcpTokenStore;
+    private readonly IUsageStore _usageStore;
+    private readonly IRefreshTokenStore _refreshTokenStore;
+    private readonly IUserStore _userStore;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, IJwtTokenService jwtTokenService)
+    public AuthController(
+        IAuthService authService,
+        IJwtTokenService jwtTokenService,
+        IConfiguration configuration,
+        IApiRegistrationStore apiStore,
+        IMcpTokenStore mcpTokenStore,
+        IUsageStore usageStore,
+        IRefreshTokenStore refreshTokenStore,
+        IUserStore userStore,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
         _jwtTokenService = jwtTokenService;
+        _configuration = configuration;
+        _apiStore = apiStore;
+        _mcpTokenStore = mcpTokenStore;
+        _usageStore = usageStore;
+        _refreshTokenStore = refreshTokenStore;
+        _userStore = userStore;
+        _logger = logger;
     }
 
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
+    /// <summary>
+    /// Initiates Google OAuth login flow.
+    /// </summary>
+    [HttpGet("login/google")]
+    public IActionResult LoginGoogle([FromQuery] string? returnUrl)
     {
-        var result = await _authService.RegisterAsync(request.Email, request.Password, ct);
-
-        if (!result.Success)
+        var redirectUrl = GetOAuthRedirectUrl(returnUrl);
+        var properties = new AuthenticationProperties
         {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Registration failed"));
-        }
-
-        return Ok(new MessageResponse("Registration successful. Please check your email to verify your account."));
+            RedirectUri = $"/api/auth/callback/google/complete?returnUrl={Uri.EscapeDataString(redirectUrl)}",
+            Items = { { "returnUrl", redirectUrl } }
+        };
+        return Challenge(properties, "Google");
     }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
+    /// <summary>
+    /// Handles Google OAuth callback after authentication.
+    /// </summary>
+    [HttpGet("callback/google/complete")]
+    public async Task<IActionResult> GoogleCallback([FromQuery] string? returnUrl, CancellationToken ct)
     {
-        var result = await _authService.LoginAsync(request.Email, request.Password, ct);
+        return await HandleOAuthCallback("google", returnUrl, ct);
+    }
 
-        if (!result.Success || result.User == null)
+    /// <summary>
+    /// Initiates GitHub OAuth login flow.
+    /// </summary>
+    [HttpGet("login/github")]
+    public IActionResult LoginGitHub([FromQuery] string? returnUrl)
+    {
+        var redirectUrl = GetOAuthRedirectUrl(returnUrl);
+        var properties = new AuthenticationProperties
         {
-            return Unauthorized(new ErrorResponse(result.ErrorMessage ?? "Invalid credentials"));
+            RedirectUri = $"/api/auth/callback/github/complete?returnUrl={Uri.EscapeDataString(redirectUrl)}",
+            Items = { { "returnUrl", redirectUrl } }
+        };
+        return Challenge(properties, "GitHub");
+    }
+
+    /// <summary>
+    /// Handles GitHub OAuth callback after authentication.
+    /// </summary>
+    [HttpGet("callback/github/complete")]
+    public async Task<IActionResult> GitHubCallback([FromQuery] string? returnUrl, CancellationToken ct)
+    {
+        return await HandleOAuthCallback("github", returnUrl, ct);
+    }
+
+    private async Task<IActionResult> HandleOAuthCallback(string provider, string? returnUrl, CancellationToken ct)
+    {
+        // Authenticate with the temporary cookie scheme
+        var result = await HttpContext.AuthenticateAsync("OAuthTemp");
+        if (!result.Succeeded || result.Principal == null)
+        {
+            var errorRedirect = GetErrorRedirectUrl(returnUrl, "Authentication failed");
+            return Redirect(errorRedirect);
         }
 
-        var accessToken = _jwtTokenService.GenerateAccessToken(result.User);
-        var (refreshToken, refreshTokenPlaintext) = await _jwtTokenService.GenerateRefreshTokenAsync(result.User.Id, ct);
+        // Extract user info from claims
+        var claims = result.Principal.Claims.ToList();
+        var providerId = claims.FirstOrDefault(c => c.Type == ClaimTypes.NameIdentifier)?.Value;
+        var email = claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+        var name = claims.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+        var avatarUrl = claims.FirstOrDefault(c => c.Type == "urn:google:picture")?.Value
+            ?? claims.FirstOrDefault(c => c.Type == "urn:github:avatar")?.Value;
 
+        if (string.IsNullOrEmpty(providerId) || string.IsNullOrEmpty(email))
+        {
+            var errorRedirect = GetErrorRedirectUrl(returnUrl, "Could not retrieve user information from provider");
+            return Redirect(errorRedirect);
+        }
+
+        // Create/update user via auth service
+        var userInfo = new OAuthUserInfo(provider, providerId, email, name, avatarUrl);
+        var authResult = await _authService.OAuthLoginAsync(userInfo, ct);
+
+        if (!authResult.Success || authResult.User == null)
+        {
+            var errorRedirect = GetErrorRedirectUrl(returnUrl, authResult.ErrorMessage ?? "Login failed");
+            return Redirect(errorRedirect);
+        }
+
+        // Generate JWT tokens
+        var accessToken = _jwtTokenService.GenerateAccessToken(authResult.User);
+        var (refreshToken, refreshTokenPlaintext) = await _jwtTokenService.GenerateRefreshTokenAsync(authResult.User.Id, ct);
+
+        // Set refresh token cookie
         SetRefreshTokenCookie(refreshTokenPlaintext, refreshToken.ExpiresAt);
 
-        return Ok(new AuthResponse(accessToken, ToUserDto(result.User)));
+        // Clear the temporary OAuth cookie
+        await HttpContext.SignOutAsync("OAuthTemp");
+
+        // Redirect to frontend with access token
+        var finalRedirectUrl = GetSuccessRedirectUrl(returnUrl, accessToken);
+        return Redirect(finalRedirectUrl);
     }
 
     [HttpPost("refresh")]
@@ -99,79 +190,6 @@ public class AuthController : ControllerBase
         return Ok(new MessageResponse("Logged out successfully"));
     }
 
-    [HttpGet("verify-email")]
-    public async Task<IActionResult> VerifyEmail([FromQuery] string token, CancellationToken ct)
-    {
-        var result = await _authService.VerifyEmailAsync(token, ct);
-
-        if (!result.Success)
-        {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Email verification failed"));
-        }
-
-        return Ok(new MessageResponse("Email verified successfully. You can now log in."));
-    }
-
-    [HttpPost("resend-verification")]
-    [Authorize]
-    public async Task<IActionResult> ResendVerification(CancellationToken ct)
-    {
-        var userId = GetUserId();
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
-
-        var result = await _authService.ResendEmailVerificationAsync(userId, ct);
-
-        if (!result.Success)
-        {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Failed to resend verification email"));
-        }
-
-        return Ok(new MessageResponse("Verification email sent"));
-    }
-
-    [HttpPost("phone")]
-    [Authorize]
-    public async Task<IActionResult> SetPhone([FromBody] SetPhoneRequest request, CancellationToken ct)
-    {
-        var userId = GetUserId();
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
-
-        var result = await _authService.SetPhoneNumberAsync(userId, request.PhoneNumber, ct);
-
-        if (!result.Success)
-        {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Failed to set phone number"));
-        }
-
-        return Ok(new MessageResponse("Verification code sent to your phone"));
-    }
-
-    [HttpPost("verify-phone")]
-    [Authorize]
-    public async Task<IActionResult> VerifyPhone([FromBody] VerifyPhoneRequest request, CancellationToken ct)
-    {
-        var userId = GetUserId();
-        if (userId == null)
-        {
-            return Unauthorized();
-        }
-
-        var result = await _authService.VerifyPhoneAsync(userId, request.Code, ct);
-
-        if (!result.Success)
-        {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Phone verification failed"));
-        }
-
-        return Ok(new MessageResponse("Phone number verified successfully"));
-    }
-
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> GetCurrentUser(CancellationToken ct)
@@ -191,9 +209,18 @@ public class AuthController : ControllerBase
         return Ok(ToUserDto(user));
     }
 
-    [HttpPut("password")]
+    /// <summary>
+    /// Deletes the user's account and all associated data (GDPR compliance).
+    /// This permanently removes:
+    /// - All API registrations and their endpoints
+    /// - All MCP tokens
+    /// - All usage records
+    /// - All refresh tokens
+    /// - The user account itself
+    /// </summary>
+    [HttpDelete("account")]
     [Authorize]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken ct)
+    public async Task<IActionResult> DeleteAccount(CancellationToken ct)
     {
         var userId = GetUserId();
         if (userId == null)
@@ -201,14 +228,72 @@ public class AuthController : ControllerBase
             return Unauthorized();
         }
 
-        var result = await _authService.ChangePasswordAsync(userId, request.CurrentPassword, request.NewPassword, ct);
-
-        if (!result.Success)
+        var user = await _authService.GetUserAsync(userId, ct);
+        if (user == null)
         {
-            return BadRequest(new ErrorResponse(result.ErrorMessage ?? "Failed to change password"));
+            return NotFound(new ErrorResponse("User not found"));
         }
 
-        return Ok(new MessageResponse("Password changed successfully"));
+        _logger.LogInformation("Account deletion initiated for user {UserId} ({Email})", userId, user.Email);
+
+        try
+        {
+            // Delete all user data in parallel where possible
+            // Order: dependent data first, then user record last
+
+            // 1. Delete API registrations (includes endpoints)
+            await _apiStore.DeleteAllForUserAsync(userId, ct);
+            _logger.LogInformation("Deleted API registrations for user {UserId}", userId);
+
+            // 2. Delete MCP tokens
+            await _mcpTokenStore.DeleteAllForUserAsync(userId, ct);
+            _logger.LogInformation("Deleted MCP tokens for user {UserId}", userId);
+
+            // 3. Delete usage records
+            await _usageStore.DeleteAllForUserAsync(userId, ct);
+            _logger.LogInformation("Deleted usage records for user {UserId}", userId);
+
+            // 4. Delete all refresh tokens (not just revoke - permanently delete)
+            await _refreshTokenStore.DeleteAllForUserAsync(userId, ct);
+            _logger.LogInformation("Deleted refresh tokens for user {UserId}", userId);
+
+            // 5. Delete user record last
+            await _userStore.DeleteAsync(userId, ct);
+            _logger.LogInformation("Deleted user record for user {UserId}", userId);
+
+            // Clear the refresh token cookie
+            ClearRefreshTokenCookie();
+
+            _logger.LogInformation("Account deletion completed for user {UserId}", userId);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Account deletion failed for user {UserId}", userId);
+            return StatusCode(500, new ErrorResponse("Account deletion failed. Please contact support."));
+        }
+    }
+
+    /// <summary>
+    /// Returns the configured OAuth providers.
+    /// </summary>
+    [HttpGet("providers")]
+    public IActionResult GetProviders()
+    {
+        var providers = new List<string>();
+
+        if (!string.IsNullOrEmpty(_configuration["Google:ClientId"]))
+        {
+            providers.Add("google");
+        }
+
+        if (!string.IsNullOrEmpty(_configuration["GitHub:ClientId"]))
+        {
+            providers.Add("github");
+        }
+
+        return Ok(new { providers });
     }
 
     private string? GetUserId()
@@ -222,7 +307,7 @@ public class AuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = true,
-            SameSite = SameSiteMode.Strict,
+            SameSite = SameSiteMode.Lax, // Required for OAuth redirect
             Expires = expires
         };
 
@@ -235,8 +320,84 @@ public class AuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = true,
-            SameSite = SameSiteMode.Strict
+            SameSite = SameSiteMode.Lax
         });
+    }
+
+    private string GetFrontendUrl()
+    {
+        return _configuration["App:FrontendUrl"] ?? "http://localhost:3000";
+    }
+
+    /// <summary>
+    /// Validates that a return URL is safe (relative path or same origin).
+    /// Prevents open redirect attacks by rejecting external URLs.
+    /// </summary>
+    private bool IsValidReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrEmpty(returnUrl))
+        {
+            return true; // Will use default
+        }
+
+        // Allow relative paths that start with / but not // (protocol-relative URLs)
+        if (returnUrl.StartsWith('/') && !returnUrl.StartsWith("//"))
+        {
+            return true;
+        }
+
+        // Allow URLs that match our frontend origin
+        var frontendUrl = GetFrontendUrl();
+        if (Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri) &&
+            Uri.TryCreate(frontendUrl, UriKind.Absolute, out var frontendUri))
+        {
+            // Check if the host matches our frontend
+            return string.Equals(uri.Host, frontendUri.Host, StringComparison.OrdinalIgnoreCase) &&
+                   uri.Port == frontendUri.Port &&
+                   string.Equals(uri.Scheme, frontendUri.Scheme, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private string GetOAuthRedirectUrl(string? returnUrl)
+    {
+        var frontendUrl = GetFrontendUrl();
+
+        // Validate returnUrl to prevent open redirect attacks
+        if (!IsValidReturnUrl(returnUrl))
+        {
+            return $"{frontendUrl}/auth/callback";
+        }
+
+        return returnUrl ?? $"{frontendUrl}/auth/callback";
+    }
+
+    private string GetSuccessRedirectUrl(string? returnUrl, string accessToken)
+    {
+        var redirectUrl = GetOAuthRedirectUrl(returnUrl);
+        // Use fragment identifier (#) instead of query parameter (?)
+        // Fragment is never sent to the server, preventing token leakage via logs, Referer header, etc.
+        return $"{redirectUrl}#token={accessToken}";
+    }
+
+    private string GetErrorRedirectUrl(string? returnUrl, string error)
+    {
+        var frontendUrl = GetFrontendUrl();
+
+        // Validate returnUrl to prevent open redirect attacks
+        string redirectUrl;
+        if (!IsValidReturnUrl(returnUrl))
+        {
+            redirectUrl = $"{frontendUrl}/auth/login";
+        }
+        else
+        {
+            redirectUrl = returnUrl ?? $"{frontendUrl}/auth/login";
+        }
+
+        var separator = redirectUrl.Contains('?') ? '&' : '?';
+        return $"{redirectUrl}{separator}error={Uri.EscapeDataString(error)}";
     }
 
     private static UserDto ToUserDto(User user)
@@ -244,9 +405,10 @@ public class AuthController : ControllerBase
         return new UserDto(
             user.Id,
             user.Email,
-            user.PhoneNumber,
+            user.DisplayName,
+            user.AvatarUrl,
+            user.OAuthProvider,
             user.EmailVerified,
-            user.PhoneVerified,
             user.Tier,
             user.CreatedAt);
     }

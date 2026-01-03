@@ -1,22 +1,46 @@
 using System.Text;
+using AspNetCoreRateLimit;
 using McpApi.Api.Auth;
+using McpApi.Api.HealthChecks;
+using McpApi.Api.Middleware;
 using McpApi.Api.Services;
 using McpApi.Core.Auth;
 using McpApi.Core.GraphQL;
 using McpApi.Core.Http;
-using McpApi.Core.Notifications;
 using McpApi.Core.OpenApi;
 using McpApi.Core.Postman;
 using McpApi.Core.Secrets;
 using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using Azure.Identity;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Application Insights (optional - only if connection string is configured)
+var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"]
+    ?? builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
+    ?? builder.Configuration["applicationinsights-connection-string"];
+
+if (!string.IsNullOrEmpty(appInsightsConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.ConnectionString = appInsightsConnectionString;
+    });
+    Console.WriteLine("[INFO] Application Insights configured");
+}
+else
+{
+    Console.WriteLine("[INFO] Application Insights not configured (ApplicationInsights:ConnectionString not set)");
+}
 
 // Add Azure Key Vault configuration
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
@@ -26,6 +50,46 @@ if (!string.IsNullOrEmpty(keyVaultUri))
         new Uri(keyVaultUri),
         new DefaultAzureCredential());
 }
+
+// Configure rate limiting
+builder.Services.AddMemoryCache();
+builder.Services.Configure<IpRateLimitOptions>(options =>
+{
+    options.EnableEndpointRateLimiting = true;
+    options.StackBlockedRequests = false;
+    options.HttpStatusCode = 429;
+    options.RealIpHeader = "X-Forwarded-For";
+    options.ClientIdHeader = "X-ClientId";
+    options.GeneralRules = new List<RateLimitRule>
+    {
+        // Global rate limit: 100 requests per minute per IP
+        new RateLimitRule
+        {
+            Endpoint = "*",
+            Period = "1m",
+            Limit = 100
+        },
+        // Auth endpoints: 10 requests per minute per IP
+        new RateLimitRule
+        {
+            Endpoint = "*:/api/auth/*",
+            Period = "1m",
+            Limit = 10
+        },
+        // Demo chat endpoint: 5 requests per minute per IP (prevent abuse)
+        new RateLimitRule
+        {
+            Endpoint = "*:/api/demo/chat",
+            Period = "1m",
+            Limit = 5
+        }
+    };
+});
+builder.Services.AddSingleton<IIpPolicyStore, MemoryCacheIpPolicyStore>();
+builder.Services.AddSingleton<IRateLimitCounterStore, MemoryCacheRateLimitCounterStore>();
+builder.Services.AddSingleton<IRateLimitConfiguration, RateLimitConfiguration>();
+builder.Services.AddSingleton<IProcessingStrategy, AsyncKeyLockProcessingStrategy>();
+builder.Services.AddInMemoryRateLimiting();
 
 // Add controllers
 builder.Services.AddControllers();
@@ -75,21 +139,75 @@ builder.Services.Configure<JwtOptions>(options =>
     options.RefreshTokenExpirationDays = int.Parse(builder.Configuration["Jwt:RefreshTokenExpirationDays"] ?? "7");
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Configure OAuth providers
+var googleClientId = builder.Configuration["Google:ClientId"];
+var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+var githubClientId = builder.Configuration["GitHub:ClientId"];
+var githubClientSecret = builder.Configuration["GitHub:ClientSecret"];
+
+var authBuilder = builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "McpApi",
-            ValidAudience = builder.Configuration["Jwt:Audience"] ?? "McpApi",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            ClockSkew = TimeSpan.Zero
-        };
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"] ?? "McpApi",
+        ValidAudience = builder.Configuration["Jwt:Audience"] ?? "McpApi",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+        ClockSkew = TimeSpan.Zero
+    };
+})
+.AddCookie("OAuthTemp", options =>
+{
+    options.Cookie.Name = "oauth_temp";
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.ExpireTimeSpan = TimeSpan.FromMinutes(10);
+});
+
+// Add Google OAuth if configured
+if (!string.IsNullOrEmpty(googleClientId) && !string.IsNullOrEmpty(googleClientSecret))
+{
+    authBuilder.AddGoogle("Google", options =>
+    {
+        options.ClientId = googleClientId;
+        options.ClientSecret = googleClientSecret;
+        options.SignInScheme = "OAuthTemp";
+        options.CallbackPath = "/api/auth/callback/google";
+        options.SaveTokens = false;
     });
+    Console.WriteLine("[INFO] Google OAuth configured");
+}
+else
+{
+    Console.WriteLine("[WARNING] Google OAuth not configured (Google:ClientId and Google:ClientSecret required)");
+}
+
+// Add GitHub OAuth if configured
+if (!string.IsNullOrEmpty(githubClientId) && !string.IsNullOrEmpty(githubClientSecret))
+{
+    authBuilder.AddGitHub("GitHub", options =>
+    {
+        options.ClientId = githubClientId;
+        options.ClientSecret = githubClientSecret;
+        options.SignInScheme = "OAuthTemp";
+        options.CallbackPath = "/api/auth/callback/github";
+        options.SaveTokens = false;
+        options.Scope.Add("user:email");
+    });
+    Console.WriteLine("[INFO] GitHub OAuth configured");
+}
+else
+{
+    Console.WriteLine("[WARNING] GitHub OAuth not configured (GitHub:ClientId and GitHub:ClientSecret required)");
+}
 
 builder.Services.AddAuthorization();
 
@@ -198,18 +316,11 @@ builder.Services.AddSingleton<IMcpTokenService>(sp =>
 
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
 
-// Configure notification services (no-op for API)
-builder.Services.AddSingleton<IEmailService>(_ => new NoOpEmailService());
-builder.Services.AddSingleton<ISmsService>(_ => new NoOpSmsService());
-
-// Configure auth service
-var baseUrl = builder.Configuration["App:BaseUrl"] ?? "https://api.mcp-api.ai";
+// Configure auth service (OAuth-only, no email/SMS needed)
 builder.Services.AddScoped<IAuthService>(sp =>
 {
     var userStore = sp.GetRequiredService<IUserStore>();
-    var emailService = sp.GetRequiredService<IEmailService>();
-    var smsService = sp.GetRequiredService<ISmsService>();
-    return new AuthService(userStore, emailService, smsService, baseUrl);
+    return new AuthService(userStore);
 });
 
 // Configure current user service
@@ -248,9 +359,31 @@ builder.Services.AddSingleton<IAuthHandlerFactory>(sp =>
 });
 builder.Services.AddSingleton<IApiClient, DynamicApiClient>();
 
+// Configure health checks
+builder.Services.AddHealthChecks()
+    .Add(new HealthCheckRegistration(
+        "cosmosdb",
+        sp =>
+        {
+            var cosmosClient = sp.GetRequiredService<CosmosClient>();
+            return new CosmosDbHealthCheck(cosmosClient, databaseName);
+        },
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "db", "cosmos" }));
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
+
+// Global exception handler must be first to catch all unhandled exceptions
+app.UseGlobalExceptionHandler();
+
+// Security headers for all responses
+app.UseSecurityHeaders();
+
+// Rate limiting
+app.UseIpRateLimiting();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -264,23 +397,26 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// Health check endpoint (no authentication required)
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var response = new
+        {
+            status = report.Status.ToString().ToLowerInvariant(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString().ToLowerInvariant(),
+                description = e.Value.Description,
+                duration = e.Value.Duration.TotalMilliseconds
+            }),
+            totalDuration = report.TotalDuration.TotalMilliseconds
+        };
+        await context.Response.WriteAsJsonAsync(response);
+    }
+}).AllowAnonymous();
+
 app.Run();
-
-// No-op implementations for API (email verification handled by Web frontend)
-internal class NoOpEmailService : IEmailService
-{
-    public Task SendEmailAsync(string to, string subject, string plainTextContent, string htmlContent, CancellationToken cancellationToken = default)
-    {
-        Console.WriteLine($"[EMAIL] To: {to}, Subject: {subject}");
-        return Task.CompletedTask;
-    }
-}
-
-internal class NoOpSmsService : ISmsService
-{
-    public Task SendSmsAsync(string phoneNumber, string message, CancellationToken cancellationToken = default)
-    {
-        Console.WriteLine($"[SMS] To: {phoneNumber}, Message: {message}");
-        return Task.CompletedTask;
-    }
-}

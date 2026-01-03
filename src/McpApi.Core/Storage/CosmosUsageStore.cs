@@ -106,4 +106,30 @@ public class CosmosUsageStore : IUsageStore
             cancellationToken: ct);
         return response.Resource;
     }
+
+    public async Task DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+    {
+        // Query all usage records for the user
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId")
+            .WithParameter("@userId", userId);
+
+        using var iterator = _container.GetItemQueryIterator<UsageRecord>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
+
+        var deleteTasks = new List<Task>();
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(ct);
+            foreach (var record in response)
+            {
+                deleteTasks.Add(_container.DeleteItemAsync<UsageRecord>(
+                    record.Id,
+                    new PartitionKey(userId),
+                    cancellationToken: ct));
+            }
+        }
+
+        await Task.WhenAll(deleteTasks);
+    }
 }

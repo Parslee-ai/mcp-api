@@ -5,6 +5,7 @@ using McpApi.Core.GraphQL;
 using McpApi.Core.Models;
 using McpApi.Core.OpenApi;
 using McpApi.Core.Postman;
+using McpApi.Core.Secrets;
 using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using McpApi.Core.Validation;
@@ -26,6 +27,8 @@ public class ApisController : ControllerBase
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ICurrentUserService _currentUser;
     private readonly IUsageTrackingService _usageTracking;
+    private readonly ISecretResolver _secretResolver;
+    private readonly ILogger<ApisController> _logger;
 
     public ApisController(
         IApiRegistrationStore store,
@@ -35,7 +38,9 @@ public class ApisController : ControllerBase
         GraphQLSchemaParser graphqlParser,
         IHttpClientFactory httpClientFactory,
         ICurrentUserService currentUser,
-        IUsageTrackingService usageTracking)
+        IUsageTrackingService usageTracking,
+        ISecretResolver secretResolver,
+        ILogger<ApisController> logger)
     {
         _store = store;
         _parser = parser;
@@ -45,6 +50,8 @@ public class ApisController : ControllerBase
         _httpClientFactory = httpClientFactory;
         _currentUser = currentUser;
         _usageTracking = usageTracking;
+        _secretResolver = secretResolver;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -164,6 +171,8 @@ public class ApisController : ControllerBase
             await _store.UpsertAsync(registration, ct);
             await _store.SaveEndpointsAsync(userId, registration.Id, endpoints, ct);
 
+            _logger.LogInformation("API registration created: {ApiId} by user {UserId}", registration.Id, userId);
+
             return CreatedAtAction(nameof(Get), new { id = registration.Id },
                 registration.ToDto(endpoints.Count, endpoints.Count(e => e.IsEnabled)));
         }
@@ -213,6 +222,9 @@ public class ApisController : ControllerBase
         }
 
         await _store.DeleteAsync(userId, id, ct);
+
+        _logger.LogInformation("API registration deleted: {ApiId} by user {UserId}", id, userId);
+
         return NoContent();
     }
 
@@ -297,9 +309,117 @@ public class ApisController : ControllerBase
             return NotFound(new ErrorResponse($"API '{id}' not found"));
         }
 
-        // TODO: Implement auth config conversion and secret encryption
-        // For now, just return not implemented
-        return StatusCode(501, new ErrorResponse("Auth configuration update not yet implemented"));
+        // Get user for encryption salt
+        var user = await _currentUser.GetCurrentUserAsync(ct);
+        if (user == null || string.IsNullOrEmpty(user.EncryptionKeySalt))
+        {
+            return BadRequest(new ErrorResponse("User encryption key not configured"));
+        }
+
+        try
+        {
+            // Convert request to auth configuration with encrypted secrets
+            api.Auth = ConvertToAuthConfig(request, userId, user.EncryptionKeySalt);
+            await _store.UpsertAsync(api, ct);
+
+            _logger.LogInformation("Auth config updated for API: {ApiId} by user {UserId}, new auth type: {AuthType}",
+                id, userId, api.Auth.AuthType);
+
+            var endpointCount = await _store.GetEndpointCountAsync(userId, id, ct);
+            var enabledCount = await _store.GetEnabledEndpointCountAsync(userId, id, ct);
+            return Ok(api.ToDto(endpointCount, enabledCount));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse(ex.Message));
+        }
+    }
+
+    private AuthConfiguration ConvertToAuthConfig(UpdateAuthConfigRequest request, string userId, string userSalt)
+    {
+        return request.AuthType.ToLowerInvariant() switch
+        {
+            "none" => new NoAuthConfig { Name = request.Name },
+
+            "apikey" => CreateApiKeyConfig(request, userId, userSalt),
+
+            "bearer" => CreateBearerConfig(request, userId, userSalt),
+
+            "basic" => CreateBasicConfig(request, userId, userSalt),
+
+            "oauth2" => CreateOAuth2Config(request, userId, userSalt),
+
+            _ => throw new ArgumentException($"Unknown auth type: {request.AuthType}")
+        };
+    }
+
+    private ApiKeyAuthConfig CreateApiKeyConfig(UpdateAuthConfigRequest request, string userId, string userSalt)
+    {
+        if (string.IsNullOrEmpty(request.In))
+            throw new ArgumentException("'In' is required for API key auth (header, query, or cookie)");
+        if (string.IsNullOrEmpty(request.ParameterName))
+            throw new ArgumentException("'ParameterName' is required for API key auth");
+        if (string.IsNullOrEmpty(request.ApiKeyValue))
+            throw new ArgumentException("'ApiKeyValue' is required for API key auth");
+
+        return new ApiKeyAuthConfig
+        {
+            Name = request.Name,
+            In = request.In,
+            ParameterName = request.ParameterName,
+            Secret = _secretResolver.Encrypt(request.ApiKeyValue, userId, userSalt)
+        };
+    }
+
+    private BearerTokenAuthConfig CreateBearerConfig(UpdateAuthConfigRequest request, string userId, string userSalt)
+    {
+        if (string.IsNullOrEmpty(request.BearerToken))
+            throw new ArgumentException("'BearerToken' is required for bearer auth");
+
+        return new BearerTokenAuthConfig
+        {
+            Name = request.Name,
+            Prefix = request.Prefix ?? "Bearer",
+            Secret = _secretResolver.Encrypt(request.BearerToken, userId, userSalt)
+        };
+    }
+
+    private BasicAuthConfig CreateBasicConfig(UpdateAuthConfigRequest request, string userId, string userSalt)
+    {
+        if (string.IsNullOrEmpty(request.Username))
+            throw new ArgumentException("'Username' is required for basic auth");
+        if (string.IsNullOrEmpty(request.Password))
+            throw new ArgumentException("'Password' is required for basic auth");
+
+        return new BasicAuthConfig
+        {
+            Name = request.Name,
+            Username = _secretResolver.Encrypt(request.Username, userId, userSalt),
+            Password = _secretResolver.Encrypt(request.Password, userId, userSalt)
+        };
+    }
+
+    private OAuth2AuthConfig CreateOAuth2Config(UpdateAuthConfigRequest request, string userId, string userSalt)
+    {
+        if (string.IsNullOrEmpty(request.Flow))
+            throw new ArgumentException("'Flow' is required for OAuth2 auth");
+        if (string.IsNullOrEmpty(request.TokenUrl))
+            throw new ArgumentException("'TokenUrl' is required for OAuth2 auth");
+        if (string.IsNullOrEmpty(request.ClientId))
+            throw new ArgumentException("'ClientId' is required for OAuth2 auth");
+        if (string.IsNullOrEmpty(request.ClientSecret))
+            throw new ArgumentException("'ClientSecret' is required for OAuth2 auth");
+
+        return new OAuth2AuthConfig
+        {
+            Name = request.Name,
+            Flow = request.Flow,
+            TokenUrl = request.TokenUrl,
+            AuthorizationUrl = request.AuthorizationUrl,
+            ClientId = _secretResolver.Encrypt(request.ClientId, userId, userSalt),
+            ClientSecret = _secretResolver.Encrypt(request.ClientSecret, userId, userSalt),
+            Scopes = request.Scopes ?? []
+        };
     }
 
     [HttpGet("{id}/endpoints")]

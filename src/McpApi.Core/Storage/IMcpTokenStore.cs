@@ -36,4 +36,9 @@ public interface IMcpTokenStore
     /// Updates the last used timestamp for a token.
     /// </summary>
     Task UpdateLastUsedAsync(string userId, string tokenId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Deletes all tokens for a user (GDPR account deletion).
+    /// </summary>
+    Task DeleteAllForUserAsync(string userId, CancellationToken ct = default);
 }

@@ -2,6 +2,7 @@ namespace McpApi.Core.Models;
 
 /// <summary>
 /// Represents a registered user in the system.
+/// OAuth-only authentication is supported (no password-based accounts).
 /// </summary>
 public class User
 {
@@ -11,49 +12,36 @@ public class User
     public required string Id { get; set; }
 
     /// <summary>
-    /// User's email address (used for login).
+    /// User's email address (used for identification).
+    /// Stored in lowercase for consistent lookups.
     /// </summary>
     public required string Email { get; set; }
 
     /// <summary>
-    /// User's phone number (optional, for SMS verification).
+    /// OAuth provider name (google, github).
     /// </summary>
-    public string? PhoneNumber { get; set; }
+    public string? OAuthProvider { get; set; }
 
     /// <summary>
-    /// BCrypt hash of the user's password.
+    /// Unique identifier from the OAuth provider.
     /// </summary>
-    public required string PasswordHash { get; set; }
+    public string? OAuthProviderId { get; set; }
+
+    /// <summary>
+    /// User's display name from OAuth provider (optional).
+    /// </summary>
+    public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// URL to user's avatar/profile picture from OAuth provider (optional).
+    /// </summary>
+    public string? AvatarUrl { get; set; }
 
     /// <summary>
     /// Whether the user's email has been verified.
+    /// OAuth users are automatically verified.
     /// </summary>
     public bool EmailVerified { get; set; }
-
-    /// <summary>
-    /// Whether the user's phone number has been verified.
-    /// </summary>
-    public bool PhoneVerified { get; set; }
-
-    /// <summary>
-    /// Token for email verification (sent via link).
-    /// </summary>
-    public string? EmailVerificationToken { get; set; }
-
-    /// <summary>
-    /// Expiration time for the email verification token.
-    /// </summary>
-    public DateTime? EmailVerificationTokenExpiry { get; set; }
-
-    /// <summary>
-    /// 6-digit code for phone verification (sent via SMS).
-    /// </summary>
-    public string? PhoneVerificationCode { get; set; }
-
-    /// <summary>
-    /// Expiration time for the phone verification code.
-    /// </summary>
-    public DateTime? PhoneVerificationCodeExpiry { get; set; }
 
     /// <summary>
     /// Salt used for deriving per-user encryption key.

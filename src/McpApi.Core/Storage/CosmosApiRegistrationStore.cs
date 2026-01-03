@@ -369,6 +369,16 @@ public class CosmosApiRegistrationStore : IApiRegistrationStore, IAsyncDisposabl
         public string? Summary { get; set; }
     }
 
+    public async Task DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+    {
+        // Get all APIs for the user
+        var apis = await GetAllAsync(userId, ct);
+
+        // Delete each API and its endpoints
+        var deleteTasks = apis.Select(api => DeleteAsync(userId, api.Id, ct));
+        await Task.WhenAll(deleteTasks);
+    }
+
     public ValueTask DisposeAsync()
     {
         _client.Dispose();

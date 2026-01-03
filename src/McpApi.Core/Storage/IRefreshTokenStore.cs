@@ -11,4 +11,9 @@ public interface IRefreshTokenStore
     Task RevokeAsync(string userId, string tokenId, CancellationToken cancellationToken = default);
     Task RevokeAllForUserAsync(string userId, CancellationToken cancellationToken = default);
     Task DeleteExpiredAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes all refresh tokens for a user (GDPR account deletion).
+    /// </summary>
+    Task DeleteAllForUserAsync(string userId, CancellationToken cancellationToken = default);
 }

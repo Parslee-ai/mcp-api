@@ -105,4 +105,11 @@ public class CosmosMcpTokenStore : IMcpTokenStore
             await UpsertAsync(token, ct);
         }
     }
+
+    public async Task DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+    {
+        var tokens = await GetAllForUserAsync(userId, ct);
+        var deleteTasks = tokens.Select(t => DeleteAsync(userId, t.Id, ct));
+        await Task.WhenAll(deleteTasks);
+    }
 }

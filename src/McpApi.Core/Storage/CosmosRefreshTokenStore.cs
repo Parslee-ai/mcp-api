@@ -125,4 +125,40 @@ public class CosmosRefreshTokenStore : IRefreshTokenStore
             }
         }
     }
+
+    public async Task DeleteAllForUserAsync(string userId, CancellationToken ct = default)
+    {
+        // Query all refresh tokens for the user (including revoked/expired)
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.userId = @userId")
+            .WithParameter("@userId", userId);
+
+        using var iterator = _container.GetItemQueryIterator<RefreshToken>(
+            query,
+            requestOptions: new QueryRequestOptions { PartitionKey = new PartitionKey(userId) });
+
+        var deleteTasks = new List<Task>();
+        while (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(ct);
+            foreach (var token in response)
+            {
+                deleteTasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _container.DeleteItemAsync<RefreshToken>(
+                            token.Id,
+                            new PartitionKey(userId),
+                            cancellationToken: ct);
+                    }
+                    catch (CosmosException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        // Already deleted
+                    }
+                }, ct));
+            }
+        }
+
+        await Task.WhenAll(deleteTasks);
+    }
 }

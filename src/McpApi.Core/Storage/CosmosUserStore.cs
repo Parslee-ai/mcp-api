@@ -35,9 +35,27 @@ public class CosmosUserStore : IUserStore
 
     public async Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default)
     {
+        // Email is stored as lowercase (normalized at write time in AuthService)
+        // Direct equality check is more efficient than LOWER() which prevents index usage
         var normalizedEmail = email.ToLowerInvariant();
-        var query = new QueryDefinition("SELECT * FROM c WHERE LOWER(c.email) = @email")
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.email = @email")
             .WithParameter("@email", normalizedEmail);
+
+        using var iterator = _container.GetItemQueryIterator<User>(query);
+        if (iterator.HasMoreResults)
+        {
+            var response = await iterator.ReadNextAsync(cancellationToken);
+            return response.FirstOrDefault();
+        }
+
+        return null;
+    }
+
+    public async Task<User?> GetByOAuthProviderAsync(string provider, string providerId, CancellationToken cancellationToken = default)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.oAuthProvider = @provider AND c.oAuthProviderId = @providerId")
+            .WithParameter("@provider", provider)
+            .WithParameter("@providerId", providerId);
 
         using var iterator = _container.GetItemQueryIterator<User>(query);
         if (iterator.HasMoreResults)

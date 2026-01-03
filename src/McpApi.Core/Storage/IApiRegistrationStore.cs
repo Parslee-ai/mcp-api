@@ -55,6 +55,9 @@ public interface IApiRegistrationStore
 
     /// <summary>Gets count of API registrations for a user (for tier limits).</summary>
     Task<int> GetApiCountAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>Deletes all API registrations and their endpoints for a user (GDPR account deletion).</summary>
+    Task DeleteAllForUserAsync(string userId, CancellationToken ct = default);
 }
 
 /// <summary>

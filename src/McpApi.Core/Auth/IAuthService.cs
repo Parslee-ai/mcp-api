@@ -8,47 +8,29 @@ namespace McpApi.Core.Auth;
 public record AuthResult(bool Success, string? ErrorMessage = null, User? User = null);
 
 /// <summary>
+/// OAuth user information received from an OAuth provider.
+/// </summary>
+public record OAuthUserInfo(
+    string Provider,
+    string ProviderId,
+    string Email,
+    string? DisplayName,
+    string? AvatarUrl
+);
+
+/// <summary>
 /// Interface for authentication operations.
 /// </summary>
 public interface IAuthService
 {
     /// <summary>
-    /// Registers a new user with email and password.
+    /// Authenticates or registers a user via OAuth.
+    /// Creates a new user if one doesn't exist for the provider/providerId.
     /// </summary>
-    Task<AuthResult> RegisterAsync(string email, string password, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Authenticates a user with email and password.
-    /// </summary>
-    Task<AuthResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Verifies a user's email using the verification token.
-    /// </summary>
-    Task<AuthResult> VerifyEmailAsync(string token, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sends a new email verification link to the user.
-    /// </summary>
-    Task<AuthResult> ResendEmailVerificationAsync(string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Sets the user's phone number and sends a verification code.
-    /// </summary>
-    Task<AuthResult> SetPhoneNumberAsync(string userId, string phoneNumber, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Verifies a user's phone number using the verification code.
-    /// </summary>
-    Task<AuthResult> VerifyPhoneAsync(string userId, string code, CancellationToken cancellationToken = default);
+    Task<AuthResult> OAuthLoginAsync(OAuthUserInfo userInfo, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets a user by their ID.
     /// </summary>
     Task<User?> GetUserAsync(string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Changes a user's password.
-    /// </summary>
-    Task<AuthResult> ChangePasswordAsync(string userId, string currentPassword, string newPassword, CancellationToken cancellationToken = default);
 }

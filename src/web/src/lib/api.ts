@@ -93,31 +93,27 @@ export default api;
 
 // Auth API
 export const authApi = {
-  register: (email: string, password: string) =>
-    api.post('/auth/register', { email, password }),
+  // Get available OAuth providers
+  getProviders: () => api.get<{ providers: string[] }>('/auth/providers'),
 
-  login: (email: string, password: string) =>
-    api.post<{ accessToken: string; user: User }>('/auth/login', { email, password }),
+  // Get OAuth login URL for redirecting
+  getGoogleLoginUrl: (returnUrl?: string) => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
+    const params = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';
+    return `${baseUrl}/auth/login/google${params}`;
+  },
+
+  getGitHubLoginUrl: (returnUrl?: string) => {
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
+    const params = returnUrl ? `?returnUrl=${encodeURIComponent(returnUrl)}` : '';
+    return `${baseUrl}/auth/login/github${params}`;
+  },
 
   logout: () => api.post('/auth/logout'),
 
   refresh: () => api.post<{ accessToken: string; user: User }>('/auth/refresh'),
 
-  verifyEmail: (token: string) =>
-    api.get(`/auth/verify-email?token=${encodeURIComponent(token)}`),
-
-  resendVerification: () => api.post('/auth/resend-verification'),
-
-  setPhone: (phoneNumber: string) =>
-    api.post('/auth/phone', { phoneNumber }),
-
-  verifyPhone: (code: string) =>
-    api.post('/auth/verify-phone', { code }),
-
   getMe: () => api.get<User>('/auth/me'),
-
-  changePassword: (currentPassword: string, newPassword: string) =>
-    api.put('/auth/password', { currentPassword, newPassword }),
 };
 
 // APIs API
@@ -178,9 +174,10 @@ export const usageApi = {
 export interface User {
   id: string;
   email: string;
-  phoneNumber?: string;
+  displayName?: string;
+  avatarUrl?: string;
+  oAuthProvider?: string;
   emailVerified: boolean;
-  phoneVerified: boolean;
   tier: string;
   createdAt: string;
 }
