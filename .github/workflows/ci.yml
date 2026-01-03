@@ -61,6 +61,7 @@ jobs:
       - name: Add coverage PR comment
         uses: marocchino/sticky-pull-request-comment@v2
         if: github.event_name == 'pull_request'
+        continue-on-error: true  # Dependabot PRs don't have permission to post comments
         with:
           recreate: true
           path: coverage/report/SummaryGithub.md
