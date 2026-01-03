@@ -37,6 +37,9 @@ public static class Constants
         /// <summary>Container for MCP API tokens.</summary>
         public const string Tokens = "tokens";
 
+        /// <summary>Container for JWT refresh tokens.</summary>
+        public const string RefreshTokens = "refresh-tokens";
+
         /// <summary>Max concurrent Cosmos operations for batch upserts.</summary>
         public const int BatchConcurrency = 10;
     }

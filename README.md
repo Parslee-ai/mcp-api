@@ -13,7 +13,7 @@ A multi-tenant SaaS platform that turns REST APIs into MCP (Model Context Protoc
 - **Usage Tracking** - Tier-based limits with monthly quotas (Free, Pro, Enterprise)
 - **Secure Secrets** - Per-user AES-256-GCM encryption with master key in Azure Key Vault
 - **Token-Based MCP Auth** - Secure API tokens for MCP server authentication
-- **Blazor Web UI** - Manage APIs, tokens, usage, and authentication
+- **Modern Web UI** - Next.js dashboard with shadcn/ui components
 - **Azure Native** - Cosmos DB storage, Key Vault for secrets, Container Apps deployment
 
 ## Quick Start
@@ -21,6 +21,7 @@ A multi-tenant SaaS platform that turns REST APIs into MCP (Model Context Protoc
 ### Prerequisites
 
 - .NET 9.0 SDK
+- Node.js 20+ (for frontend)
 - Azure Cosmos DB account (or emulator)
 - Azure Key Vault (optional, for secret storage)
 
@@ -32,7 +33,7 @@ A multi-tenant SaaS platform that turns REST APIs into MCP (Model Context Protoc
    cd mcp-api
    ```
 
-2. Configure settings in `src/McpApi.Web/appsettings.json`:
+2. Configure API settings in `src/McpApi.Api/appsettings.json`:
    ```json
    {
      "Cosmos": {
@@ -41,16 +42,31 @@ A multi-tenant SaaS platform that turns REST APIs into MCP (Model Context Protoc
      },
      "KeyVault": {
        "VaultUri": "https://your-keyvault.vault.azure.net/"
+     },
+     "Jwt": {
+       "Secret": "your-256-bit-secret-key",
+       "Issuer": "McpApi",
+       "Audience": "McpApi"
+     },
+     "Cors": {
+       "AllowedOrigins": ["http://localhost:3000"]
      }
    }
    ```
 
-3. Run the web application:
+3. Run the API server:
    ```bash
-   dotnet run --project src/McpApi.Web
+   dotnet run --project src/McpApi.Api
    ```
 
-4. Open https://localhost:5001 to access the management UI
+4. Run the frontend (in a separate terminal):
+   ```bash
+   cd src/web
+   npm install
+   npm run dev
+   ```
+
+5. Open http://localhost:3000 to access the management UI
 
 ### Running the MCP Server
 
@@ -72,31 +88,40 @@ Configure your MCP client to connect to the server's stdio interface. All API op
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   McpApi.Web    │     │   McpApi.Mcp    │     │  McpApi.Core    │
-│  (Blazor UI)    │     │  (MCP Server)   │     │   (Shared)      │
+│    src/web      │     │   McpApi.Api    │     │   McpApi.Mcp    │
+│   (Next.js)     │────▶│  (REST API)     │     │  (MCP Server)   │
 │                 │     │                 │     │                 │
-│ • User Auth     │     │ • Token Auth    │     │ • OpenAPI Parse │
-│ • API Management│     │ • Tool Provider │     │ • Auth Handlers │
-│ • Token Mgmt    │     │ • Execute Calls │     │ • Cosmos Store  │
-│ • Usage Dashboard│    │ • Usage Tracking│     │ • Encryption    │
-└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
-         │                       │                       │
-         └───────────────────────┴───────────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │      Azure Cosmos DB    │
-                    │  • users                │
-                    │  • api-registrations    │
-                    │  • api-endpoints        │
-                    │  • tokens               │
-                    │  • usage                │
-                    └─────────────────────────┘
+│ • shadcn/ui     │     │ • JWT Auth      │     │ • Token Auth    │
+│ • React Query   │     │ • Controllers   │     │ • Tool Provider │
+│ • Tailwind CSS  │     │ • CORS          │     │ • Execute Calls │
+└─────────────────┘     └────────┬────────┘     └────────┬────────┘
+                                 │                       │
+                                 └───────────┬───────────┘
+                                             │
+                                ┌────────────┴────────────┐
+                                │      McpApi.Core        │
+                                │                         │
+                                │ • OpenAPI/GraphQL Parse │
+                                │ • Auth Handlers         │
+                                │ • Cosmos Storage        │
+                                │ • Encryption            │
+                                └────────────┬────────────┘
+                                             │
+                                ┌────────────┴────────────┐
+                                │      Azure Cosmos DB    │
+                                │  • users                │
+                                │  • api-registrations    │
+                                │  • api-endpoints        │
+                                │  • tokens               │
+                                │  • usage                │
+                                └─────────────────────────┘
 ```
 
 ### Project Structure
 
+- **src/web** - Next.js 14+ frontend with App Router, shadcn/ui, and Tailwind CSS
+- **McpApi.Api** - ASP.NET Core REST API with JWT authentication
 - **McpApi.Core** - Domain models, OpenAPI parsing, storage, auth handlers, encryption
-- **McpApi.Web** - Blazor Server UI for user auth, API management, tokens, and usage
 - **McpApi.Mcp** - MCP server with token-based auth exposing registered APIs as tools
 
 ## Supported API Formats
@@ -112,11 +137,12 @@ Configure your MCP client to connect to the server's stdio interface. All API op
 
 ### User Authentication
 
-MCP-API uses email-based authentication with optional phone verification:
+MCP-API uses JWT-based authentication with access and refresh tokens:
 
 1. **Register** - Create account with email and password
-2. **Verify Email** - Click verification link sent to your email
-3. **Verify Phone** (optional) - Enter SMS code for additional security
+2. **Login** - Receive access token (15 min) and refresh token (7 days, httpOnly cookie)
+3. **Verify Email** - Click verification link sent to your email
+4. **Verify Phone** (optional) - Enter SMS code for additional security
 
 ### MCP Server Authentication
 
@@ -154,27 +180,49 @@ View your usage and remaining quota at `/usage` in the web UI.
 
 ### Docker
 
+**API Server:**
 ```bash
-docker build -t mcpapi-web .
+docker build -t mcp-api .
 docker run -p 8080:8080 \
   -e Cosmos__ConnectionString="your-connection-string" \
   -e Encryption__MasterKey="your-base64-encoded-32-byte-key" \
   -e KeyVault__VaultUri="https://your-keyvault.vault.azure.net/" \
-  mcpapi-web
+  -e Jwt__Secret="your-jwt-secret" \
+  mcp-api
+```
+
+**Frontend:**
+```bash
+cd src/web
+docker build -t mcp-web \
+  --build-arg NEXT_PUBLIC_API_URL=https://your-api-url/api .
+docker run -p 3000:3000 mcp-web
 ```
 
 ### Azure Container Apps
 
 ```bash
-# Build and push to ACR
+# Build and push API to ACR
 az acr build --registry <registry> --resource-group <rg> \
-  --image mcpapi-web:v1 --file Dockerfile .
+  --image mcp-api:v1 --file Dockerfile .
 
-# Deploy to Container Apps
-az containerapp create --name mcpapi-web --resource-group <rg> \
-  --image <registry>.azurecr.io/mcpapi-web:v1 \
+# Build and push frontend to ACR
+az acr build --registry <registry> --resource-group <rg> \
+  --image mcp-web:v1 --file src/web/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://your-api.azurecontainerapps.io/api \
+  src/web
+
+# Deploy API to Container Apps
+az containerapp create --name mcp-api --resource-group <rg> \
+  --image <registry>.azurecr.io/mcp-api:v1 \
   --environment <env-name> \
   --ingress external --target-port 8080
+
+# Deploy frontend to Container Apps
+az containerapp create --name mcp-web --resource-group <rg> \
+  --image <registry>.azurecr.io/mcp-web:v1 \
+  --environment <env-name> \
+  --ingress external --target-port 3000
 ```
 
 ## Development
@@ -182,7 +230,11 @@ az containerapp create --name mcpapi-web --resource-group <rg> \
 ### Build
 
 ```bash
+# Backend
 dotnet build
+
+# Frontend
+cd src/web && npm run build
 ```
 
 ### Test
