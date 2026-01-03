@@ -96,7 +96,8 @@ jobs:
   docker-build:
     needs: [build-and-test, build-web]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Only run if on main branch AND secrets are configured
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.ACR_LOGIN_SERVER != ''
 
     permissions:
       contents: read
@@ -164,7 +165,8 @@ jobs:
   deploy:
     needs: docker-build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Only run if docker-build succeeded (not skipped)
+    if: needs.docker-build.result == 'success'
     environment: production
 
     permissions:
