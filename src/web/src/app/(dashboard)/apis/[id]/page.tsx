@@ -67,7 +67,7 @@ export default function ApiDetailPage() {
     try {
       await deleteApi.mutateAsync(id);
       router.push('/apis');
-    } catch (error) {
+    } catch {
       setIsDeleting(false);
     }
   };

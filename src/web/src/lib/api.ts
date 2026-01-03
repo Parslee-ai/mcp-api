@@ -43,15 +43,20 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// Extended request config to track retry state
+interface ExtendedAxiosRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
+
 // Response interceptor - handle 401 and refresh token
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as ExtendedAxiosRequestConfig | undefined;
 
     if (error.response?.status === 401 && originalRequest) {
       // Avoid infinite loops
-      if ((originalRequest as any)._retry) {
+      if (originalRequest._retry) {
         setAccessToken(null);
         // Only redirect if not already on auth pages or landing page
         if (typeof window !== 'undefined' &&
@@ -62,7 +67,7 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      (originalRequest as any)._retry = true;
+      originalRequest._retry = true;
 
       // Use singleton promise to prevent multiple refresh calls
       if (!refreshPromise) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apisApi, ApiRegistration, ApiDetail, ApiEndpoint } from '@/lib/api';
+import { apisApi } from '@/lib/api';
 
 export function useApis() {
   return useQuery({

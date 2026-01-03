@@ -34,11 +34,14 @@ function CallbackContent() {
 
   useEffect(() => {
     // Check for error in query params (errors can still be in query params as they're not sensitive)
-    const error = searchParams.get('error');
+    const errorParam = searchParams.get('error');
 
-    if (error) {
-      setStatus('error');
-      setErrorMessage(decodeURIComponent(error));
+    if (errorParam) {
+      // Wrap in microtask to avoid synchronous setState in effect
+      queueMicrotask(() => {
+        setStatus('error');
+        setErrorMessage(decodeURIComponent(errorParam));
+      });
       return;
     }
 
@@ -47,8 +50,10 @@ function CallbackContent() {
     const token = getTokenFromFragment();
 
     if (!token) {
-      setStatus('error');
-      setErrorMessage('No authentication token received');
+      queueMicrotask(() => {
+        setStatus('error');
+        setErrorMessage('No authentication token received');
+      });
       return;
     }
 
@@ -57,12 +62,13 @@ function CallbackContent() {
       window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
 
-    // Set the token in auth context
-    setUserFromToken(token);
-    setStatus('success');
-
-    // Redirect to dashboard immediately
-    router.push('/dashboard');
+    // Set the token in auth context and update status
+    queueMicrotask(() => {
+      setUserFromToken(token);
+      setStatus('success');
+      // Redirect to dashboard
+      router.push('/dashboard');
+    });
   }, [searchParams, setUserFromToken, router]);
 
   return (

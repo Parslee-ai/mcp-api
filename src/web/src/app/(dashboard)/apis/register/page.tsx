@@ -36,6 +36,18 @@ const registerSchema = z.object({
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
+interface RegisterApiPayload {
+  name: string;
+  specUrl: string;
+  description?: string;
+  authType: string;
+  apiKey?: string;
+  apiKeyHeader?: string;
+  bearerToken?: string;
+  basicUsername?: string;
+  basicPassword?: string;
+}
+
 export default function RegisterApiPage() {
   const router = useRouter();
   const registerApi = useRegisterApi();
@@ -59,7 +71,7 @@ export default function RegisterApiPage() {
   const onSubmit = async (data: RegisterFormData) => {
     setError(null);
     try {
-      const payload: any = {
+      const payload: RegisterApiPayload = {
         name: data.name,
         specUrl: data.specUrl,
         description: data.description,
@@ -78,8 +90,9 @@ export default function RegisterApiPage() {
 
       await registerApi.mutateAsync(payload);
       router.push('/apis');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to register API');
+    } catch (err) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to register API');
     }
   };
 
@@ -155,7 +168,7 @@ export default function RegisterApiPage() {
               <Label>Authentication Type</Label>
               <Select
                 value={authType}
-                onValueChange={(value) => setValue('authType', value as any)}
+                onValueChange={(value) => setValue('authType', value as RegisterFormData['authType'])}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select authentication type" />
