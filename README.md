@@ -195,7 +195,7 @@ docker run -p 8080:8080 \
 ```bash
 cd src/web
 docker build -t mcp-web \
-  --build-arg NEXT_PUBLIC_API_URL=https://your-api-url/api .
+  --build-arg NEXT_PUBLIC_API_URL=https://api.mcp-api.ai/api .
 docker run -p 3000:3000 mcp-web
 ```
 
@@ -209,7 +209,7 @@ az acr build --registry <registry> --resource-group <rg> \
 # Build and push frontend to ACR
 az acr build --registry <registry> --resource-group <rg> \
   --image mcp-web:v1 --file src/web/Dockerfile \
-  --build-arg NEXT_PUBLIC_API_URL=https://your-api.azurecontainerapps.io/api \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.mcp-api.ai/api \
   src/web
 
 # Deploy API to Container Apps

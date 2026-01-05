@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
-  API_IMAGE_NAME: anyapi-api
-  WEB_IMAGE_NAME: anyapi-web
+  API_IMAGE_NAME: mcp-api
+  WEB_IMAGE_NAME: mcp-web
 
 jobs:
   build-and-test:

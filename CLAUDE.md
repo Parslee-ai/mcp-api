@@ -43,7 +43,7 @@ az acr build --registry <registry> --resource-group <rg> --image mcp-api:v1 --fi
 
 # Build and push frontend to ACR
 az acr build --registry <registry> --resource-group <rg> --image mcp-web:v1 \
-  --file src/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://your-api.azurecontainerapps.io/api src/web
+  --file src/web/Dockerfile --build-arg NEXT_PUBLIC_API_URL=https://api.mcp-api.ai/api src/web
 
 # Update API container app
 az containerapp update --name mcp-api --resource-group <rg> --image <registry>.azurecr.io/mcp-api:v1
@@ -184,13 +184,13 @@ Cosmos DB requires `CosmosSystemTextJsonSerializer` to use System.Text.Json inst
 
 To set up GitHub OAuth:
 1. Create OAuth App at https://github.com/settings/developers
-2. Add callback URL: `https://your-api-domain/api/auth/callback/github`
+2. Add callback URL: `https://api.mcp-api.ai/api/auth/callback/github`
 
 **API - Optional:**
 - `Cosmos:DatabaseName` (default: "mcpapi")
 - `KeyVault:VaultUri` (optional, for secret references)
 - `Cors:AllowedOrigins` (array of allowed frontend origins)
-- `App:FrontendUrl` (default: "http://localhost:3000") - for OAuth redirect
+- `App:FrontendUrl` (default: "https://mcp-api.ai") - for OAuth redirect
 
 **Frontend (src/web):**
 - `NEXT_PUBLIC_API_URL` - API base URL (e.g., `http://localhost:5001/api`)
