@@ -106,11 +106,17 @@ jobs:
       id-token: write
 
     outputs:
-      api-image: ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
-      web-image: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:${{ github.sha }}
+      api-image: ${{ steps.set-outputs.outputs.api-image }}
+      web-image: ${{ steps.set-outputs.outputs.web-image }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set outputs
+        id: set-outputs
+        run: |
+          echo "api-image=${{ vars.ACR_LOGIN_SERVER }}/${{ env.API_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "web-image=${{ vars.ACR_LOGIN_SERVER }}/${{ env.WEB_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
