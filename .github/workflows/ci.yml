@@ -105,18 +105,8 @@ jobs:
       contents: read
       id-token: write
 
-    outputs:
-      api-image: ${{ steps.set-outputs.outputs.api-image }}
-      web-image: ${{ steps.set-outputs.outputs.web-image }}
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set outputs
-        id: set-outputs
-        run: |
-          echo "api-image=${{ vars.ACR_LOGIN_SERVER }}/${{ env.API_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
-          echo "web-image=${{ vars.ACR_LOGIN_SERVER }}/${{ env.WEB_IMAGE_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -190,11 +180,11 @@ jobs:
           az containerapp update \
             --name ${{ vars.API_CONTAINER_APP_NAME }} \
             --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
-            --image ${{ needs.docker-build.outputs.api-image }}
+            --image ${{ vars.ACR_LOGIN_SERVER }}/mcp-api:${{ github.sha }}
 
       - name: Deploy Web to Azure Container Apps
         run: |
           az containerapp update \
             --name ${{ vars.WEB_CONTAINER_APP_NAME }} \
             --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
-            --image ${{ needs.docker-build.outputs.web-image }}
+            --image ${{ vars.ACR_LOGIN_SERVER }}/mcp-web:${{ github.sha }}
