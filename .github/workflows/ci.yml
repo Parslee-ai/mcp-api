@@ -106,8 +106,8 @@ jobs:
       id-token: write
 
     outputs:
-      api-image: ${{ steps.meta-api.outputs.tags }}
-      web-image: ${{ steps.meta-web.outputs.tags }}
+      api-image: ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}:${{ github.sha }}
+      web-image: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}:${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
@@ -128,7 +128,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.API_IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long
             type=raw,value=latest
 
       - name: Build and push API image
@@ -146,7 +146,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.WEB_IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long
             type=raw,value=latest
 
       - name: Build and push Web image
