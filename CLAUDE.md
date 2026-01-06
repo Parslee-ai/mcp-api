@@ -52,6 +52,70 @@ az containerapp update --name mcp-api --resource-group <rg> --image <registry>.a
 az containerapp update --name mcp-web --resource-group <rg> --image <registry>.azurecr.io/mcp-web:v1
 ```
 
+## Azure DNS Management
+
+The domain `mcp-api.ai` DNS is managed in Azure DNS, enabling programmatic DNS changes via Azure CLI.
+
+**Zone Details:**
+- **Zone Name:** `mcp-api.ai`
+- **Resource Group:** `parslee-rg`
+- **Subscription:** Parslee Azure
+
+**Current DNS Records:**
+
+| Type | Name | Value | TTL |
+|------|------|-------|-----|
+| A | @ | 172.193.124.42 | 3600 |
+| CNAME | www | mcp-web.politefield-aa1b1cd5.eastus2.azurecontainerapps.io | 3600 |
+| MX | @ | eforward1-5.registrar-servers.com (10-20) | 3600 |
+| TXT | @ | v=spf1 include:spf.efwd.registrar-servers.com ~all | 3600 |
+| TXT | @ | _1gatgfdlovbnmrk5ykdxs99utehsi6q | 3600 |
+| NS | @ | ns1-03.azure-dns.com, ns2-03.azure-dns.net, ns3-03.azure-dns.org, ns4-03.azure-dns.info | 172800 |
+
+**Common DNS Operations:**
+
+```bash
+# List all records
+az network dns record-set list \
+  --resource-group parslee-rg \
+  --zone-name mcp-api.ai \
+  -o table
+
+# Add A record
+az network dns record-set a add-record \
+  --resource-group parslee-rg \
+  --zone-name mcp-api.ai \
+  --record-set-name "subdomain" \
+  --ipv4-address "1.2.3.4"
+
+# Add CNAME record
+az network dns record-set cname set-record \
+  --resource-group parslee-rg \
+  --zone-name mcp-api.ai \
+  --record-set-name "api" \
+  --cname "target.azurecontainerapps.io"
+
+# Add TXT record (for domain verification)
+az network dns record-set txt add-record \
+  --resource-group parslee-rg \
+  --zone-name mcp-api.ai \
+  --record-set-name "@" \
+  --value "verification-token"
+
+# Delete a record set
+az network dns record-set a delete \
+  --resource-group parslee-rg \
+  --zone-name mcp-api.ai \
+  --name "subdomain" \
+  --yes
+```
+
+**Nameservers (configured at Namecheap registrar):**
+- ns1-03.azure-dns.com
+- ns2-03.azure-dns.net
+- ns3-03.azure-dns.org
+- ns4-03.azure-dns.info
+
 ## Architecture
 
 ```

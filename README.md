@@ -176,6 +176,25 @@ API secrets are encrypted per-user with AES-256-GCM. The master encryption key i
 
 View your usage and remaining quota at `/usage` in the web UI.
 
+## Infrastructure
+
+### Domain & DNS
+
+The domain `mcp-api.ai` is registered at Namecheap with DNS managed in **Azure DNS** for programmatic control.
+
+| Resource | Value |
+|----------|-------|
+| Domain | mcp-api.ai |
+| DNS Zone | Azure DNS (`parslee-rg`) |
+| Nameservers | ns1-03.azure-dns.com, ns2-03.azure-dns.net, ns3-03.azure-dns.org, ns4-03.azure-dns.info |
+
+**Current Records:**
+- `mcp-api.ai` → 172.193.124.42 (A)
+- `www.mcp-api.ai` → mcp-web.politefield-aa1b1cd5.eastus2.azurecontainerapps.io (CNAME)
+- MX records for Namecheap email forwarding
+
+DNS changes can be made via Azure CLI - see [CLAUDE.md](CLAUDE.md#azure-dns-management) for commands.
+
 ## Deployment
 
 ### Docker
