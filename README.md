@@ -190,6 +190,7 @@ The domain `mcp-api.ai` is registered at Namecheap with DNS managed in **Azure D
 
 **Current Records:**
 - `mcp-api.ai` → 172.193.124.42 (A)
+- `api.mcp-api.ai` → mcp-api.politefield-aa1b1cd5.eastus2.azurecontainerapps.io (CNAME)
 - `www.mcp-api.ai` → mcp-web.politefield-aa1b1cd5.eastus2.azurecontainerapps.io (CNAME)
 - MX records for Namecheap email forwarding
 

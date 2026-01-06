@@ -66,6 +66,7 @@ The domain `mcp-api.ai` DNS is managed in Azure DNS, enabling programmatic DNS c
 | Type | Name | Value | TTL |
 |------|------|-------|-----|
 | A | @ | 172.193.124.42 | 3600 |
+| CNAME | api | mcp-api.politefield-aa1b1cd5.eastus2.azurecontainerapps.io | 3600 |
 | CNAME | www | mcp-web.politefield-aa1b1cd5.eastus2.azurecontainerapps.io | 3600 |
 | MX | @ | eforward1-5.registrar-servers.com (10-20) | 3600 |
 | TXT | @ | v=spf1 include:spf.efwd.registrar-servers.com ~all | 3600 |
