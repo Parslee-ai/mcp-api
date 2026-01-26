@@ -28,7 +28,7 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.69.0",
     "tailwind-merge": "^3.4.0",
-    "zod": "^4.3.4"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
