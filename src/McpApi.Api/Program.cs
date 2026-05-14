@@ -13,6 +13,7 @@ using McpApi.Core.Secrets;
 using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using Azure.Identity;
+using Parslee.Shared.Configuration;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -42,13 +43,16 @@ else
     Console.WriteLine("[INFO] Application Insights not configured (ApplicationInsights:ConnectionString not set)");
 }
 
-// Add Azure Key Vault configuration
+// Add Azure Key Vault configuration. McpApi uses the legacy "KeyVault:VaultUri" key —
+// bridge it to the shared "KeyVault:Url" before calling AddParsleeKeyVault.
 var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
 if (!string.IsNullOrEmpty(keyVaultUri))
 {
-    builder.Configuration.AddAzureKeyVault(
-        new Uri(keyVaultUri),
-        new DefaultAzureCredential());
+    builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+    {
+        ["KeyVault:Url"] = keyVaultUri,
+    });
+    builder.Configuration.AddParsleeKeyVault(new DefaultAzureCredential());
 }
 
 // Configure rate limiting
