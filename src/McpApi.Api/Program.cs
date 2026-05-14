@@ -14,6 +14,7 @@ using McpApi.Core.Services;
 using McpApi.Core.Storage;
 using Azure.Identity;
 using Parslee.Shared.Configuration;
+using Parslee.Shared.Infrastructure.Telemetry;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -25,23 +26,10 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Application Insights (optional - only if connection string is configured)
-var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"]
-    ?? builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]
-    ?? builder.Configuration["applicationinsights-connection-string"];
-
-if (!string.IsNullOrEmpty(appInsightsConnectionString))
-{
-    builder.Services.AddApplicationInsightsTelemetry(options =>
-    {
-        options.ConnectionString = appInsightsConnectionString;
-    });
-    Console.WriteLine("[INFO] Application Insights configured");
-}
-else
-{
-    Console.WriteLine("[INFO] Application Insights not configured (ApplicationInsights:ConnectionString not set)");
-}
+// Application Insights via Parslee.Shared.Infrastructure.Telemetry. Resolves the connection
+// string from canonical config keys + the legacy lowercase form; no-ops in Development.
+builder.Services.AddParsleeApplicationInsights(
+    builder.Configuration, builder.Environment, cloudRoleName: "mcpapi");
 
 // Add Azure Key Vault configuration. McpApi uses the legacy "KeyVault:VaultUri" key —
 // bridge it to the shared "KeyVault:Url" before calling AddParsleeKeyVault.
